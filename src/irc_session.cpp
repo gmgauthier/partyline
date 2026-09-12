@@ -192,6 +192,19 @@ void IrcSession::quote(const std::string& raw)
     write_line(raw);
 }
 
+void IrcSession::change_nick(const std::string& nick)
+{
+  if (!nick.empty())
+    write_line("NICK " + nick);
+}
+
+void IrcSession::send_lag_ping()
+{
+  lag_sent_us_ = g_get_monotonic_time();
+  lag_token_ = std::to_string(lag_sent_us_);
+  write_line("PING :" + lag_token_);
+}
+
 void IrcSession::enqueue(Event ev)
 {
   {
@@ -243,6 +256,12 @@ void IrcSession::on_dispatch()
         signal_names.emit(ev.channel, nicks);
         break;
       }
+      case Event::NickChange:
+        signal_nick.emit(ev.nick, ev.text, ev.me);
+        break;
+      case Event::Lag:
+        signal_lag.emit();
+        break;
     }
   }
 }
@@ -333,6 +352,32 @@ void IrcSession::handle_line(const std::string& line)
     ev.nick = p.nick;
     enqueue(std::move(ev));
     return;
+  }
+
+  if (cmd == "NICK" && !p.params.empty()) {
+    Event ev;
+    ev.type = Event::NickChange;
+    ev.nick = p.nick;
+    ev.text = p.params[0];
+    ev.me = is_me(p.nick);
+    if (ev.me) {
+      std::lock_guard<std::mutex> lock(nick_mu_);
+      nick_ = ev.text;
+    }
+    enqueue({Event::Line, line, {}, {}, false, {}});
+    enqueue(std::move(ev));
+    return;
+  }
+
+  if (cmd == "PONG") {
+    const std::string token = p.params.empty() ? std::string() : p.params.back();
+    if (!lag_token_.empty() && token == lag_token_) {
+      const gint64 now = g_get_monotonic_time();
+      lag_ms_.store(static_cast<int>((now - lag_sent_us_) / 1000));
+      lag_token_.clear();
+      enqueue({Event::Lag, {}, {}, {}, false, {}});
+      return;
+    }
   }
 
   if (cmd == "353" && p.params.size() >= 3) {

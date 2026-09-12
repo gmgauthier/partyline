@@ -114,11 +114,15 @@ MainWindow::MainWindow()
 
   add(root_);
   show_all();
+  if (settings_.palette >= 0 && settings_.palette < 4 && pal_item_[settings_.palette])
+    pal_item_[settings_.palette]->set_active(true);
+  apply_palette();
   signal_hide().connect(sigc::mem_fun(*this, &MainWindow::persist));
 }
 
 MainWindow::~MainWindow()
 {
+  stop_lag_timer();
   persist();
   if (session_)
     session_->stop();
@@ -184,6 +188,18 @@ void MainWindow::build_menu()
   view_status_item_->signal_toggled().connect(
       sigc::mem_fun(*this, &MainWindow::on_toggle_status));
   view->append(*view_status_item_);
+  view->append(*Gtk::manage(new Gtk::SeparatorMenuItem()));
+  auto* pal_menu = Gtk::manage(new Gtk::Menu());
+  Gtk::RadioButtonGroup pal_grp;
+  const char* pal_labels[] = {"_White", "_Black", "_Navy", "_Olive"};
+  for (int i = 0; i < 4; ++i) {
+    pal_item_[i] = Gtk::manage(new Gtk::RadioMenuItem(pal_grp, pal_labels[i], true));
+    pal_item_[i]->signal_toggled().connect([this, i]() { on_palette(i); });
+    pal_menu->append(*pal_item_[i]);
+  }
+  auto* pal_top = Gtk::manage(new Gtk::MenuItem("_Palette", true));
+  pal_top->set_submenu(*pal_menu);
+  view->append(*pal_top);
   add_menu("_View", *view);
 
   auto* tools = Gtk::manage(new Gtk::Menu());
@@ -267,6 +283,8 @@ void MainWindow::build_body()
   input_.set_sensitive(false);
   btn_send_.set_sensitive(false);
   input_.signal_activate().connect(sigc::mem_fun(*this, &MainWindow::on_send));
+  input_.signal_key_press_event().connect(sigc::mem_fun(*this, &MainWindow::on_input_key),
+                                          false);
   btn_send_.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_send));
   input_row_.set_border_width(4);
   input_row_.pack_start(input_target_, Gtk::PACK_SHRINK);
@@ -401,10 +419,18 @@ void MainWindow::refresh_status_bar()
   if (!registered_)
     return;
   Glib::ustring s = connected_nick_ + " @ " + connected_host_;
+  if (session_ && session_->tls())
+    s += "  tls";
+  if (session_) {
+    const int lag = session_->lag_ms();
+    if (lag >= 0) {
+      char buf[32];
+      g_snprintf(buf, sizeof(buf), "  lag %.1fs", lag / 1000.0);
+      s += buf;
+    }
+  }
   if (const Chan* ch = find_chan(current_channel_))
     s += "  " + ch->name + "  " + std::to_string(ch->nicks.size()) + " users";
-  else
-    s += "  tls";
   set_status(s);
 }
 
@@ -616,6 +642,25 @@ void MainWindow::handle_command(const Glib::ustring& line)
   else if (low == "quote") {
     if (session_ && !rest.empty())
       session_->quote(rest.raw());
+  } else if (low == "nick") {
+    if (session_ && !rest.empty())
+      session_->change_nick(rest.raw());
+  } else if (low == "msg") {
+    Glib::ustring target, msg;
+    const auto sp2 = rest.find(' ');
+    if (sp2 == Glib::ustring::npos)
+      target = rest;
+    else {
+      target = rest.substr(0, sp2);
+      msg = rest.substr(sp2 + 1);
+    }
+    if (session_ && !target.empty() && !msg.empty()) {
+      session_->privmsg(target.raw(), msg.raw());
+      if (find_chan(target))
+        append_channel(target, "<" + connected_nick_ + "> " + msg);
+      else
+        append_status("* -> " + target + ": " + msg);
+    }
   } else if (session_)
     session_->quote(line.substr(1).raw());
 }
@@ -684,6 +729,8 @@ void MainWindow::on_connect()
   session_->signal_part.connect(sigc::mem_fun(*this, &MainWindow::on_session_part));
   session_->signal_quit_nick.connect(sigc::mem_fun(*this, &MainWindow::on_session_quit));
   session_->signal_names.connect(sigc::mem_fun(*this, &MainWindow::on_session_names));
+  session_->signal_nick.connect(sigc::mem_fun(*this, &MainWindow::on_session_nick));
+  session_->signal_lag.connect(sigc::mem_fun(*this, &MainWindow::on_session_lag));
   session_->start(s->host, static_cast<guint16>(s->port), s->tls, nick.raw(),
                   settings_.realname.empty() ? nick.raw() : settings_.realname);
 }
@@ -712,6 +759,10 @@ void MainWindow::on_send()
   input_.set_text("");
   if (text.empty())
     return;
+  history_.push_back(text);
+  history_pos_ = -1;
+  history_draft_.clear();
+  tab_index_ = -1;
   if (text[0] == '/') {
     handle_command(text);
     return;
@@ -748,11 +799,15 @@ void MainWindow::on_session_registered()
   btn_join_.set_sensitive(true);
   input_.set_sensitive(true);
   btn_send_.set_sensitive(true);
+  start_lag_timer();
+  if (session_)
+    session_->send_lag_ping();
   refresh_status_bar();
 }
 
 void MainWindow::on_session_finished(const Glib::ustring& reason)
 {
+  stop_lag_timer();
   append_status("*** " + reason);
   set_connected_ui(false);
 }
@@ -926,6 +981,194 @@ void MainWindow::on_toggle_status()
 {
   if (view_status_item_)
     status_.set_visible(view_status_item_->get_active());
+}
+
+void MainWindow::on_session_nick(const Glib::ustring& old_nick, const Glib::ustring& new_nick,
+                                 bool me)
+{
+  for (auto& ch : channels_) {
+    for (auto& n : ch.nicks) {
+      if (!nick_eq(n, old_nick))
+        continue;
+      Glib::ustring pref;
+      const Glib::ustring core = strip_nick_prefix(n);
+      if (n != core)
+        pref = n.substr(0, 1);
+      n = pref + new_nick;
+      append_channel(ch.name, "* " + old_nick + " is now known as " + new_nick);
+    }
+  }
+  if (me) {
+    connected_nick_ = new_nick;
+    settings_.nick = new_nick.raw();
+    settings_.save();
+    append_status("* You are now known as " + new_nick);
+  }
+  refresh_nicks();
+  refresh_status_bar();
+}
+
+void MainWindow::on_session_lag()
+{
+  refresh_status_bar();
+}
+
+void MainWindow::apply_palette()
+{
+  static const char* bg[] = {"#FFFFFF", "#000000", "#0B1D38", "#3D4A1A"};
+  static const char* fg[] = {"#1A1A1A", "#C0C0C0", "#E8F2FF", "#F7F5EF"};
+  int i = settings_.palette;
+  if (i < 0 || i > 3)
+    i = 0;
+  const std::string css =
+      Glib::ustring::compose(
+          "textview.partyline-buffer, textview.partyline-buffer text {"
+          " background-color: %1; color: %2; }",
+          bg[i], fg[i])
+          .raw();
+  if (!palette_css_) {
+    palette_css_ = Gtk::CssProvider::create();
+    Gtk::StyleContext::add_provider_for_screen(
+        Gdk::Screen::get_default(), palette_css_, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+  }
+  try {
+    palette_css_->load_from_data(css);
+  } catch (const Glib::Error& e) {
+    std::cerr << "partyline: palette CSS: " << e.what() << "\n";
+  }
+}
+
+void MainWindow::on_palette(int id)
+{
+  if (id < 0 || id > 3 || !pal_item_[id] || !pal_item_[id]->get_active())
+    return;
+  settings_.palette = id;
+  apply_palette();
+  settings_.save();
+}
+
+void MainWindow::start_lag_timer()
+{
+  stop_lag_timer();
+  lag_conn_ = Glib::signal_timeout().connect_seconds(
+      sigc::mem_fun(*this, &MainWindow::on_lag_tick), 60);
+}
+
+void MainWindow::stop_lag_timer()
+{
+  if (lag_conn_.connected())
+    lag_conn_.disconnect();
+}
+
+bool MainWindow::on_lag_tick()
+{
+  if (session_ && session_->running() && registered_)
+    session_->send_lag_ping();
+  return true;
+}
+
+void MainWindow::complete_nick()
+{
+  Chan* ch = find_chan(current_channel_);
+  if (!ch || pane_ != Pane::Channel)
+    return;
+  const Glib::ustring text = input_.get_text();
+  if (tab_index_ < 0) {
+    Glib::ustring::size_type i = text.size();
+    while (i > 0 && text[i - 1] != ' ')
+      --i;
+    tab_before_ = text.substr(0, i);
+    tab_prefix_ = text.substr(i);
+    tab_after_.clear();
+    tab_matches_.clear();
+    if (tab_prefix_.empty())
+      return;
+    for (const auto& n : ch->nicks) {
+      const Glib::ustring core = strip_nick_prefix(n);
+      if (g_ascii_strncasecmp(core.c_str(), tab_prefix_.c_str(),
+                              static_cast<int>(tab_prefix_.size())) == 0)
+        tab_matches_.push_back(core);
+    }
+    if (tab_matches_.empty())
+      return;
+    std::sort(tab_matches_.begin(), tab_matches_.end(),
+              [](const Glib::ustring& a, const Glib::ustring& b) {
+                return g_ascii_strcasecmp(a.c_str(), b.c_str()) < 0;
+              });
+    tab_index_ = 0;
+  } else if (!tab_matches_.empty()) {
+    tab_index_ = (tab_index_ + 1) % static_cast<int>(tab_matches_.size());
+  } else {
+    return;
+  }
+  const Glib::ustring nick = tab_matches_[static_cast<size_t>(tab_index_)];
+  const Glib::ustring out = tab_before_ + nick + (tab_before_.empty() ? ": " : " ");
+  input_.set_text(out);
+  input_.set_position(-1);
+}
+
+void MainWindow::history_prev()
+{
+  if (history_.empty())
+    return;
+  if (history_pos_ < 0) {
+    history_draft_ = input_.get_text();
+    history_pos_ = static_cast<int>(history_.size()) - 1;
+  } else if (history_pos_ > 0)
+    --history_pos_;
+  input_.set_text(history_[static_cast<size_t>(history_pos_)]);
+  input_.set_position(-1);
+}
+
+void MainWindow::history_next()
+{
+  if (history_pos_ < 0)
+    return;
+  if (history_pos_ + 1 < static_cast<int>(history_.size())) {
+    ++history_pos_;
+    input_.set_text(history_[static_cast<size_t>(history_pos_)]);
+  } else {
+    history_pos_ = -1;
+    input_.set_text(history_draft_);
+  }
+  input_.set_position(-1);
+}
+
+void MainWindow::scroll_buffer(int pages)
+{
+  auto adj = buffer_scroll_.get_vadjustment();
+  if (!adj)
+    return;
+  adj->set_value(adj->get_value() + pages * adj->get_page_size());
+}
+
+bool MainWindow::on_input_key(GdkEventKey* event)
+{
+  if (!event)
+    return false;
+  if (event->keyval != GDK_KEY_Tab && event->keyval != GDK_KEY_ISO_Left_Tab)
+    tab_index_ = -1;
+  if (event->keyval == GDK_KEY_Tab) {
+    complete_nick();
+    return true;
+  }
+  if (event->keyval == GDK_KEY_Up) {
+    history_prev();
+    return true;
+  }
+  if (event->keyval == GDK_KEY_Down) {
+    history_next();
+    return true;
+  }
+  if (event->keyval == GDK_KEY_Page_Up) {
+    scroll_buffer(-1);
+    return true;
+  }
+  if (event->keyval == GDK_KEY_Page_Down) {
+    scroll_buffer(1);
+    return true;
+  }
+  return false;
 }
 
 }  // namespace partyline

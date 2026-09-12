@@ -33,6 +33,10 @@ class IrcSession {
   void part(const std::string& channel);
   void privmsg(const std::string& target, const std::string& text);
   void quote(const std::string& raw);
+  void change_nick(const std::string& nick);
+  void send_lag_ping();
+  bool tls() const { return tls_; }
+  int lag_ms() const { return lag_ms_.load(); }
 
   sigc::signal<void, Glib::ustring> signal_line;
   sigc::signal<void> signal_registered;
@@ -42,6 +46,8 @@ class IrcSession {
   sigc::signal<void, Glib::ustring, Glib::ustring, bool> signal_part;
   sigc::signal<void, Glib::ustring> signal_quit_nick;
   sigc::signal<void, Glib::ustring, std::vector<Glib::ustring>> signal_names;
+  sigc::signal<void, Glib::ustring, Glib::ustring, bool> signal_nick;
+  sigc::signal<void> signal_lag;
 
  private:
   struct Event {
@@ -53,7 +59,9 @@ class IrcSession {
       Join,
       Part,
       QuitNick,
-      Names
+      Names,
+      NickChange,
+      Lag
     } type = Line;
     std::string text;
     std::string channel;
@@ -89,6 +97,9 @@ class IrcSession {
 
   std::string names_chan_;
   std::vector<std::string> names_acc_;
+  std::atomic<int> lag_ms_{-1};
+  std::string lag_token_;
+  gint64 lag_sent_us_ = 0;
 };
 
 }  // namespace partyline

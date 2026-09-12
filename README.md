@@ -10,7 +10,7 @@ LCOS itself: [https://github.com/BryanLunduke/LCOS](https://github.com/BryanLund
 
 ## Status
 
-**M4 in tree.** Several channels on one server; the tree switches buffers. Polish is M5.
+**M5 in tree.** Multi-channel, palettes, lag, `/nick` `/msg`. Package is M6.
 
 | Doc | What |
 |---|---|

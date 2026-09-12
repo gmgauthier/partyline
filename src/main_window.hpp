@@ -53,6 +53,16 @@ class MainWindow : public Gtk::Window {
   void on_send();
   void on_quit();
   void on_about();
+  void apply_palette();
+  void on_palette(int id);
+  bool on_input_key(GdkEventKey* event);
+  bool on_lag_tick();
+  void start_lag_timer();
+  void stop_lag_timer();
+  void complete_nick();
+  void history_prev();
+  void history_next();
+  void scroll_buffer(int pages);
   void on_session_line(const Glib::ustring& text);
   void on_session_registered();
   void on_session_finished(const Glib::ustring& reason);
@@ -62,6 +72,8 @@ class MainWindow : public Gtk::Window {
   void on_session_part(const Glib::ustring& channel, const Glib::ustring& nick, bool me);
   void on_session_quit(const Glib::ustring& nick);
   void on_session_names(const Glib::ustring& channel, const std::vector<Glib::ustring>& nicks);
+  void on_session_nick(const Glib::ustring& old_nick, const Glib::ustring& new_nick, bool me);
+  void on_session_lag();
   void style_tree_column();
   void on_tree_cell_data(Gtk::CellRenderer* cell, const Gtk::TreeModel::const_iterator& it);
   bool on_tree_motion(GdkEventMotion* event);
@@ -85,7 +97,10 @@ class MainWindow : public Gtk::Window {
   Gtk::CheckMenuItem* view_tree_item_ = nullptr;
   Gtk::CheckMenuItem* view_nicks_item_ = nullptr;
   Gtk::CheckMenuItem* view_status_item_ = nullptr;
+  Gtk::RadioMenuItem* pal_item_[4] = {nullptr, nullptr, nullptr, nullptr};
   Glib::RefPtr<Gtk::AccelGroup> accel_;
+  Glib::RefPtr<Gtk::CssProvider> palette_css_;
+  sigc::connection lag_conn_;
 
   Gtk::Paned outer_{Gtk::ORIENTATION_HORIZONTAL};
   Gtk::Paned inner_{Gtk::ORIENTATION_HORIZONTAL};
@@ -132,6 +147,14 @@ class MainWindow : public Gtk::Window {
   Glib::ustring current_channel_;
   bool registered_ = false;
   bool suppress_tree_ = false;
+  std::vector<Glib::ustring> history_;
+  int history_pos_ = -1;
+  Glib::ustring history_draft_;
+  std::vector<Glib::ustring> tab_matches_;
+  int tab_index_ = -1;
+  Glib::ustring tab_prefix_;
+  Glib::ustring tab_before_;
+  Glib::ustring tab_after_;
   Pane pane_ = Pane::Status;
   Gtk::TreeModel::Path tree_current_path_;
   Gtk::TreeModel::Path tree_hover_path_;

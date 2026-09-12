@@ -140,10 +140,13 @@ void Settings::load()
   last_server = get_str(kf, "user", "last_server");
   window_w = get_int(kf, "ui", "width", window_w);
   window_h = get_int(kf, "ui", "height", window_h);
+  palette = get_int(kf, "ui", "palette", palette);
   if (window_w < 400)
     window_w = 400;
   if (window_h < 300)
     window_h = 300;
+  if (palette < 0 || palette > 3)
+    palette = 0;
 
   servers.clear();
   for (const Glib::ustring& group : kf.get_groups()) {
@@ -177,6 +180,7 @@ void Settings::save() const
   kf.set_string("user", "last_server", last_server);
   kf.set_integer("ui", "width", window_w);
   kf.set_integer("ui", "height", window_h);
+  kf.set_integer("ui", "palette", palette);
   for (const auto& s : servers) {
     const std::string group = "server." + s.id;
     kf.set_string(group, "name", s.name);
