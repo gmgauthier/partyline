@@ -2,13 +2,18 @@
 
 #pragma once
 
+#include "irc_session.hpp"
+
 #include <gtkmm.h>
+
+#include <memory>
 
 namespace partyline {
 
 class MainWindow : public Gtk::Window {
  public:
   MainWindow();
+  ~MainWindow() override;
 
  private:
   void load_css();
@@ -17,13 +22,18 @@ class MainWindow : public Gtk::Window {
   void build_body();
   void fill_tree();
   void set_status(const Glib::ustring& text);
+  void append_line(const Glib::ustring& text);
   void show_not_yet(const Glib::ustring& feature);
+  void set_connected_ui(bool on);
   void on_servers();
   void on_connect();
   void on_disconnect();
   void on_join();
   void on_quit();
   void on_about();
+  void on_session_line(const Glib::ustring& text);
+  void on_session_registered();
+  void on_session_finished(const Glib::ustring& reason);
   void on_toggle_tree();
   void on_toggle_nicks();
   void on_toggle_status();
@@ -66,6 +76,11 @@ class MainWindow : public Gtk::Window {
   Glib::RefPtr<Gtk::ListStore> nick_store_;
   Gtk::TreeModelColumn<Glib::ustring> col_nick_;
   Gtk::TreeModelColumnRecord nick_cols_;
+
+  std::unique_ptr<IrcSession> session_;
+  Glib::ustring connected_host_;
+  Glib::ustring connected_nick_;
+  bool registered_ = false;
 };
 
 }  // namespace partyline

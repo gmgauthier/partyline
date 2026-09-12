@@ -9,7 +9,7 @@ Repos: https://gitea.scriptorium/gmgauthier/partyline (origin), https://github.c
 
 ## Status (2026-09-12)
 
-**M0 in tree.** Menus, toolbar, server tree, buffer, nick list, About. No socket.
+**M1 in tree.** TLS connect to a typed host:port as nick. Status buffer shows motd / errors. Disconnect. Join is M2.
 
 ## 1. Locked decisions
 
@@ -23,7 +23,7 @@ Repos: https://gitea.scriptorium/gmgauthier/partyline (origin), https://github.c
 | v1 servers | Several, user-edited. Seed the empty list with **Libera** (`irc.libera.chat:6697` TLS) and **OFTC** (`irc.oftc.net:6697` TLS) as examples — do not auto-connect |
 | Nick | One default nick in the ini; per-server override allowed |
 | TLS | **Required in v1.** Plaintext is a debug toggle, off by default |
-| Engine | Do **not** use Debian `libircclient1` as shipped — it `Depends: libc6` only, no OpenSSL. Use libircclient **as a Meson subproject/wrap with SSL**, or GIO `SocketClient` + TLS + a tiny RFC1459 speaker. Prefer the wrap so we do not write PING/PONG |
+| Engine | **GIO `SocketClient` + TLS** (glib-networking) and a tiny RFC1459 speaker (`NICK`/`USER`/`PING`/`PONG`/`QUIT`). Debian `libircclient1` has no OpenSSL |
 | Thread | Library/socket on a worker. UI thread only paints. `Glib::Dispatcher` (or equivalent) across the gap |
 | Commands | Typed line: ordinary text is `PRIVMSG` to the current target. Lines starting `/` are client commands: `/join` `/part` `/quit` `/nick` `/msg` `/quote`. Unknown `/` → `/quote` |
 | Never as v1 | DCC, ident daemon, SASL (unless the wrap makes it cheap), bouncer, Matrix, plugins, scripts, tray, bubbles, header bar, URL unfurl, channel logs as identity |
@@ -109,8 +109,8 @@ v1 is M0 through M6. Do not open M7+ until this set has been lived with.
 
 | Milestone | Done when |
 |---|---|
-| **M0 — Window** | Menus, toolbar, paned tree/buffer/nicks, About, CSS. Matches the ASCII mock. No socket. **In tree.** |
-| **M1 — One server** | TLS connect to a typed host:port as nick. Status shows motd / errors. Disconnect. |
+| **M0 — Window** | Menus, toolbar, paned tree/buffer/nicks, About, CSS. Matches the ASCII mock. No socket. **Done.** |
+| **M1 — One server** | TLS connect to a typed host:port as nick. Status shows motd / errors. Disconnect. **In tree.** |
 | **M2 — One channel** | `/join` or Join…. PRIVMSG in and out. Nick list from `353`. |
 | **M3 — Server list** | Ini + Servers… dialog. Seed Libera / OFTC. Last nick remembered. |
 | **M4 — Several channels** | Two channels on one server; tree switches buffers; the other stays joined. |

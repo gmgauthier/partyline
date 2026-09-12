@@ -10,7 +10,7 @@ LCOS itself: [https://github.com/BryanLunduke/LCOS](https://github.com/BryanLund
 
 ## Status
 
-**M0 in tree.** Menus, toolbar, server tree, buffer, nick list, About. No socket yet.
+**M1 in tree.** Connect (TLS) to a host:port as nick. Status shows the motd. Disconnect. Join is M2.
 
 | Doc | What |
 |---|---|

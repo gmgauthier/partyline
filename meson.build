@@ -33,6 +33,8 @@ executable(
   'src/paths.cpp',
   'src/main_window.cpp',
   'src/about_dialog.cpp',
+  'src/connect_dialog.cpp',
+  'src/irc_session.cpp',
   include_directories: inc,
   dependencies: [gtkmm],
   install: true,

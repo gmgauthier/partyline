@@ -2,6 +2,7 @@
 
 #include "main_window.hpp"
 #include "about_dialog.hpp"
+#include "connect_dialog.hpp"
 #include "paths.hpp"
 
 #include <iostream>
@@ -39,6 +40,12 @@ MainWindow::MainWindow()
 
   add(root_);
   show_all();
+}
+
+MainWindow::~MainWindow()
+{
+  if (session_)
+    session_->stop();
 }
 
 void MainWindow::load_css()
@@ -146,8 +153,8 @@ void MainWindow::build_body()
   buffer_.get_style_context()->add_class("partyline-buffer");
   buffer_.get_buffer()->set_text(
       "Not connected.\n\n"
-      "Connect, Join, and Servers land in M1.\n"
-      "This window is M0: the mIRC chrome, no socket yet.\n");
+      "File → Connect (or the Connect button): host, port, nick, TLS.\n"
+      "Join is M2. Servers… is M3.\n");
   buffer_scroll_.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
   buffer_scroll_.add(buffer_);
 
@@ -207,13 +214,32 @@ void MainWindow::set_status(const Glib::ustring& text)
   status_.push(text, status_ctx_);
 }
 
+void MainWindow::append_line(const Glib::ustring& text)
+{
+  auto buf = buffer_.get_buffer();
+  buf->insert(buf->end(), text + "\n");
+  auto mark = buf->create_mark("end", buf->end(), false);
+  buffer_.scroll_to(mark, 0.0);
+  buf->delete_mark(mark);
+}
+
 void MainWindow::show_not_yet(const Glib::ustring& feature)
 {
-  Gtk::MessageDialog dlg(*this, feature + " is M1.", false, Gtk::MESSAGE_INFO,
+  Gtk::MessageDialog dlg(*this, feature + " is later.", false, Gtk::MESSAGE_INFO,
                          Gtk::BUTTONS_OK, true);
   dlg.set_title("Partyline");
-  dlg.set_secondary_text("M0 is the window. The socket comes next.");
+  dlg.set_secondary_text("M1 is one TLS server. Join is M2. The server list is M3.");
   dlg.run();
+}
+
+void MainWindow::set_connected_ui(bool on)
+{
+  btn_connect_.set_sensitive(!on);
+  btn_disconnect_.set_sensitive(on);
+  if (!on) {
+    set_title("Partyline");
+    set_status("Not connected.");
+  }
 }
 
 void MainWindow::on_servers()
@@ -223,12 +249,42 @@ void MainWindow::on_servers()
 
 void MainWindow::on_connect()
 {
-  show_not_yet("Connect");
+  if (session_ && session_->running())
+    return;
+
+  ConnectDialog dlg(*this);
+  if (dlg.run() != Gtk::RESPONSE_OK)
+    return;
+
+  const Glib::ustring host = dlg.host();
+  const Glib::ustring nick = dlg.nick();
+  if (host.empty() || nick.empty()) {
+    Gtk::MessageDialog err(*this, "Host and nick are required.", false, Gtk::MESSAGE_ERROR,
+                           Gtk::BUTTONS_OK, true);
+    err.run();
+    return;
+  }
+
+  connected_host_ = host;
+  connected_nick_ = nick;
+  registered_ = false;
+  buffer_.get_buffer()->set_text("");
+  set_status(Glib::ustring("Connecting to ") + host + "…");
+  set_title("Partyline — " + nick + " @ " + host);
+  btn_connect_.set_sensitive(false);
+  btn_disconnect_.set_sensitive(true);
+
+  session_ = std::make_unique<IrcSession>();
+  session_->signal_line.connect(sigc::mem_fun(*this, &MainWindow::on_session_line));
+  session_->signal_registered.connect(sigc::mem_fun(*this, &MainWindow::on_session_registered));
+  session_->signal_finished.connect(sigc::mem_fun(*this, &MainWindow::on_session_finished));
+  session_->start(host.raw(), dlg.port(), dlg.tls(), nick.raw(), nick.raw());
 }
 
 void MainWindow::on_disconnect()
 {
-  show_not_yet("Disconnect");
+  if (session_)
+    session_->stop();
 }
 
 void MainWindow::on_join()
@@ -238,7 +294,27 @@ void MainWindow::on_join()
 
 void MainWindow::on_quit()
 {
+  if (session_)
+    session_->stop();
   hide();
+}
+
+void MainWindow::on_session_line(const Glib::ustring& text)
+{
+  append_line(text);
+}
+
+void MainWindow::on_session_registered()
+{
+  registered_ = true;
+  set_status(connected_nick_ + " @ " + connected_host_ + "  tls");
+}
+
+void MainWindow::on_session_finished(const Glib::ustring& reason)
+{
+  append_line("*** " + reason);
+  set_connected_ui(false);
+  registered_ = false;
 }
 
 void MainWindow::on_about()
