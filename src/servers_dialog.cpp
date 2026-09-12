@@ -41,6 +41,7 @@ ServersDialog::ServersDialog(Gtk::Window& parent, Settings& settings)
 
   port_.set_numeric(true);
   tls_.set_active(true);
+  tls_verify_.set_active(true);
   nick_.set_placeholder_text("blank = default nick");
   default_nick_.set_text(settings_.nick);
   default_nick_.set_max_length(16);
@@ -58,7 +59,10 @@ ServersDialog::ServersDialog(Gtk::Window& parent, Settings& settings)
   add_row(1, "_Name", name_);
   add_row(2, "_Host", host_);
   add_row(3, "_Port", port_);
-  grid_.attach(tls_, 1, 4, 1, 1);
+  auto* tls_row = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 12));
+  tls_row->pack_start(tls_, Gtk::PACK_SHRINK);
+  tls_row->pack_start(tls_verify_, Gtk::PACK_SHRINK);
+  grid_.attach(*tls_row, 1, 4, 1, 1);
   add_row(5, "Nick o_verride", nick_);
 
   body_.set_border_width(12);
@@ -106,6 +110,7 @@ void ServersDialog::load_row()
   host_.set_text(s.host);
   port_.set_value(s.port);
   tls_.set_active(s.tls);
+  tls_verify_.set_active(s.tls_verify);
   nick_.set_text(s.nick);
 }
 
@@ -118,6 +123,7 @@ void ServersDialog::store_row()
   s.host = host_.get_text().raw();
   s.port = port_.get_value_as_int();
   s.tls = tls_.get_active();
+  s.tls_verify = tls_verify_.get_active();
   s.nick = nick_.get_text().raw();
   if (s.name.empty())
     s.name = s.host.empty() ? "Server" : s.host;
@@ -158,6 +164,7 @@ void ServersDialog::on_add_server()
   s.host = "irc.example.net";
   s.port = 6697;
   s.tls = true;
+  s.tls_verify = true;
   unique_id(s);
   working_.push_back(std::move(s));
   refill();

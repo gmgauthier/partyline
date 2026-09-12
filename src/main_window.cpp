@@ -731,7 +731,7 @@ void MainWindow::on_connect()
   session_->signal_names.connect(sigc::mem_fun(*this, &MainWindow::on_session_names));
   session_->signal_nick.connect(sigc::mem_fun(*this, &MainWindow::on_session_nick));
   session_->signal_lag.connect(sigc::mem_fun(*this, &MainWindow::on_session_lag));
-  session_->start(s->host, static_cast<guint16>(s->port), s->tls, nick.raw(),
+  session_->start(s->host, static_cast<guint16>(s->port), s->tls, s->tls_verify, nick.raw(),
                   settings_.realname.empty() ? nick.raw() : settings_.realname);
 }
 

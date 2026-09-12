@@ -23,7 +23,7 @@ class IrcSession {
   IrcSession(const IrcSession&) = delete;
   IrcSession& operator=(const IrcSession&) = delete;
 
-  void start(std::string host, guint16 port, bool tls, std::string nick,
+  void start(std::string host, guint16 port, bool tls, bool tls_verify, std::string nick,
              std::string realname);
   void stop();
   bool running() const { return running_.load(); }
@@ -80,6 +80,7 @@ class IrcSession {
   std::string host_;
   guint16 port_ = 6697;
   bool tls_ = true;
+  bool tls_verify_ = true;
   std::string nick_;
   std::string realname_;
   mutable std::mutex nick_mu_;

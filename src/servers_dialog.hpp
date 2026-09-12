@@ -37,6 +37,7 @@ class ServersDialog : public Gtk::Dialog {
   Gtk::Entry host_;
   Gtk::SpinButton port_;
   Gtk::CheckButton tls_{"TLS"};
+  Gtk::CheckButton tls_verify_{"Verify hostname"};
   Gtk::Entry nick_;
   Gtk::Entry default_nick_;
 

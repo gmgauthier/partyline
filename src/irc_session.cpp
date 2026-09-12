@@ -105,13 +105,14 @@ std::string IrcSession::nick() const
   return nick_;
 }
 
-void IrcSession::start(std::string host, guint16 port, bool tls, std::string nick,
-                       std::string realname)
+void IrcSession::start(std::string host, guint16 port, bool tls, bool tls_verify,
+                       std::string nick, std::string realname)
 {
   stop();
   host_ = std::move(host);
   port_ = port == 0 ? (tls ? 6697 : 6667) : port;
   tls_ = tls;
+  tls_verify_ = tls_verify;
   {
     std::lock_guard<std::mutex> lock(nick_mu_);
     nick_ = std::move(nick);
@@ -429,6 +430,11 @@ void IrcSession::thread_main()
   try {
     auto client = Gio::SocketClient::create();
     client->set_tls(tls_);
+    if (tls_ && !tls_verify_) {
+      const auto flags = static_cast<Gio::TlsCertificateFlags>(
+          Gio::TLS_CERTIFICATE_VALIDATE_ALL & ~Gio::TLS_CERTIFICATE_BAD_IDENTITY);
+      client->set_tls_validation_flags(flags);
+    }
     enqueue({Event::Line,
              std::string(tls_ ? "Connecting (TLS) to " : "Connecting to ") + host_ + ":" +
                  std::to_string(port_) + " as " + nick() + "…",
@@ -464,8 +470,15 @@ void IrcSession::thread_main()
       }
     }
   } catch (const Glib::Error& e) {
-    if (!(cancellable_ && cancellable_->is_cancelled()))
+    if (!(cancellable_ && cancellable_->is_cancelled())) {
       finish = e.what();
+      const std::string w = e.what();
+      if (w.find("TLS certificate") != std::string::npos ||
+          w.find("Unacceptable TLS") != std::string::npos)
+        finish +=
+            " — certificate name may not match this host. Try the network's canonical "
+            "name, or uncheck Verify hostname in Servers…";
+    }
   } catch (const std::exception& e) {
     finish = e.what();
   }

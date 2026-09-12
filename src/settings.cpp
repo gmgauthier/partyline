@@ -98,8 +98,8 @@ void Settings::seed_if_empty()
 {
   if (!servers.empty())
     return;
-  servers.push_back({"libera", "Libera", "irc.libera.chat", 6697, true, {}});
-  servers.push_back({"oftc", "OFTC", "irc.oftc.net", 6697, true, {}});
+  servers.push_back({"libera", "Libera", "irc.libera.chat", 6697, true, true, {}});
+  servers.push_back({"oftc", "OFTC", "irc.oftc.net", 6697, true, true, {}});
 }
 
 Server* Settings::find_id(const std::string& id)
@@ -164,6 +164,7 @@ void Settings::load()
     if (s.port < 1 || s.port > 65535)
       s.port = 6697;
     s.tls = get_bool(kf, group.raw().c_str(), "tls", true);
+    s.tls_verify = get_bool(kf, group.raw().c_str(), "tls_verify", true);
     s.nick = get_str(kf, group, "nick");
     if (!s.host.empty())
       servers.push_back(std::move(s));
@@ -187,6 +188,7 @@ void Settings::save() const
     kf.set_string(group, "host", s.host);
     kf.set_integer(group, "port", s.port);
     kf.set_boolean(group, "tls", s.tls);
+    kf.set_boolean(group, "tls_verify", s.tls_verify);
     kf.set_string(group, "nick", s.nick);
   }
   try {

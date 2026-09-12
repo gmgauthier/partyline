@@ -13,6 +13,7 @@ struct Server {
   std::string host;
   int port = 6697;
   bool tls = true;
+  bool tls_verify = true;
   std::string nick;
 };
 
