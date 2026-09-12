@@ -3,6 +3,7 @@
 #pragma once
 
 #include "irc_session.hpp"
+#include "settings.hpp"
 
 #include <gtkmm.h>
 
@@ -25,6 +26,9 @@ class MainWindow : public Gtk::Window {
   void build_body();
   void fill_tree_idle();
   void fill_tree_connected();
+  void persist();
+  const Server* selected_server();
+  void select_tree(int kind, const Glib::ustring& server_id);
   void set_status(const Glib::ustring& text);
   void append_status(const Glib::ustring& text);
   void append_channel(const Glib::ustring& text);
@@ -33,7 +37,6 @@ class MainWindow : public Gtk::Window {
   void set_connected_ui(bool on);
   void reset_channel();
   void ensure_channel_row();
-  void select_tree_kind(int kind);
   void refresh_nicks();
   void add_nick(const Glib::ustring& nick);
   void remove_nick(const Glib::ustring& nick);
@@ -96,6 +99,7 @@ class MainWindow : public Gtk::Window {
   Glib::RefPtr<Gtk::TreeStore> tree_store_;
   Gtk::TreeModelColumn<Glib::ustring> col_tree_name_;
   Gtk::TreeModelColumn<int> col_tree_kind_;
+  Gtk::TreeModelColumn<Glib::ustring> col_server_id_;
   Gtk::TreeModelColumnRecord tree_cols_;
 
   Glib::RefPtr<Gtk::ListStore> nick_store_;
@@ -105,9 +109,11 @@ class MainWindow : public Gtk::Window {
   Glib::RefPtr<Gtk::TextBuffer> status_buf_;
   Glib::RefPtr<Gtk::TextBuffer> channel_buf_;
 
+  Settings settings_;
   std::unique_ptr<IrcSession> session_;
   Glib::ustring connected_host_;
   Glib::ustring connected_nick_;
+  Glib::ustring connected_server_id_;
   Glib::ustring channel_name_;
   std::vector<Glib::ustring> nicks_;
   bool registered_ = false;

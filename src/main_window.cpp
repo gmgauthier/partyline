@@ -2,9 +2,9 @@
 
 #include "main_window.hpp"
 #include "about_dialog.hpp"
-#include "connect_dialog.hpp"
 #include "join_dialog.hpp"
 #include "paths.hpp"
+#include "servers_dialog.hpp"
 
 #include <glib.h>
 
@@ -49,8 +49,10 @@ bool nick_eq(const Glib::ustring& a, const Glib::ustring& b)
 
 MainWindow::MainWindow()
 {
+  settings_.load();
   set_title("Partyline");
-  set_default_size(900, 600);
+  set_default_size(settings_.window_w > 0 ? settings_.window_w : 900,
+                   settings_.window_h > 0 ? settings_.window_h : 600);
   set_border_width(0);
   get_style_context()->add_class("partyline-window");
 
@@ -67,10 +69,12 @@ MainWindow::MainWindow()
 
   add(root_);
   show_all();
+  signal_hide().connect(sigc::mem_fun(*this, &MainWindow::persist));
 }
 
 MainWindow::~MainWindow()
 {
+  persist();
   if (session_)
     session_->stop();
 }
@@ -166,6 +170,7 @@ void MainWindow::build_body()
 {
   tree_cols_.add(col_tree_name_);
   tree_cols_.add(col_tree_kind_);
+  tree_cols_.add(col_server_id_);
   tree_store_ = Gtk::TreeStore::create(tree_cols_);
   tree_view_.set_model(tree_store_);
   tree_view_.append_column("Servers", col_tree_name_);
@@ -181,7 +186,8 @@ void MainWindow::build_body()
   channel_buf_ = Gtk::TextBuffer::create();
   status_buf_->set_text(
       "Not connected.\n\n"
-      "File → Connect: host, port, nick, TLS.\n"
+      "Select a server in the tree, then Connect.\n"
+      "File → Servers… edits the list (Libera and OFTC are seeded).\n"
       "Join… or /join #channel once you are connected.\n");
 
   buffer_.set_editable(false);
@@ -234,36 +240,80 @@ void MainWindow::fill_tree_idle()
 {
   suppress_tree_ = true;
   tree_store_->clear();
-  auto add_server = [this](const Glib::ustring& name) {
+  for (const auto& s : settings_.servers) {
     auto row = *tree_store_->append();
-    row[col_tree_name_] = name;
+    row[col_tree_name_] = s.name;
     row[col_tree_kind_] = 0;
+    row[col_server_id_] = s.id;
     auto status = *tree_store_->append(row.children());
     status[col_tree_name_] = "Status";
     status[col_tree_kind_] = 1;
-  };
-  add_server("Libera");
-  add_server("OFTC");
+    status[col_server_id_] = s.id;
+  }
   tree_view_.expand_all();
   suppress_tree_ = false;
+  if (!settings_.last_server.empty())
+    select_tree(1, settings_.last_server);
+  else if (!settings_.servers.empty())
+    select_tree(1, settings_.servers.front().id);
 }
 
 void MainWindow::fill_tree_connected()
 {
   suppress_tree_ = true;
   tree_store_->clear();
-  auto server = *tree_store_->append();
-  server[col_tree_name_] = connected_host_;
-  server[col_tree_kind_] = 0;
-  auto status = *tree_store_->append(server.children());
-  status[col_tree_name_] = "Status";
-  status[col_tree_kind_] = 1;
-  if (!channel_name_.empty()) {
-    auto ch = *tree_store_->append(server.children());
-    ch[col_tree_name_] = channel_name_;
-    ch[col_tree_kind_] = 2;
+  for (const auto& s : settings_.servers) {
+    auto row = *tree_store_->append();
+    row[col_tree_name_] = s.name;
+    row[col_tree_kind_] = 0;
+    row[col_server_id_] = s.id;
+    auto status = *tree_store_->append(row.children());
+    status[col_tree_name_] = "Status";
+    status[col_tree_kind_] = 1;
+    status[col_server_id_] = s.id;
+    if (s.id == connected_server_id_.raw() && !channel_name_.empty()) {
+      auto ch = *tree_store_->append(row.children());
+      ch[col_tree_name_] = channel_name_;
+      ch[col_tree_kind_] = 2;
+      ch[col_server_id_] = s.id;
+    }
   }
   tree_view_.expand_all();
+  suppress_tree_ = false;
+}
+
+void MainWindow::persist()
+{
+  int w = 0, h = 0;
+  get_size(w, h);
+  if (w > 0)
+    settings_.window_w = w;
+  if (h > 0)
+    settings_.window_h = h;
+  settings_.save();
+}
+
+const Server* MainWindow::selected_server()
+{
+  const auto sel = tree_view_.get_selection()->get_selected();
+  if (!sel)
+    return nullptr;
+  const Glib::ustring id = (*sel)[col_server_id_];
+  return settings_.find_id(id.raw());
+}
+
+void MainWindow::select_tree(int kind, const Glib::ustring& server_id)
+{
+  suppress_tree_ = true;
+  tree_store_->foreach_iter([this, kind, server_id](const Gtk::TreeModel::iterator& it) {
+    if ((*it)[col_tree_kind_] == kind && (*it)[col_server_id_] == server_id) {
+      const Gtk::TreeModel::Path path(it);
+      tree_view_.get_selection()->select(it);
+      tree_view_.scroll_to_row(path);
+      return true;
+    }
+    return false;
+  });
   suppress_tree_ = false;
 }
 
@@ -338,23 +388,8 @@ void MainWindow::reset_channel()
 void MainWindow::ensure_channel_row()
 {
   fill_tree_connected();
-  select_tree_kind(2);
+  select_tree(2, connected_server_id_);
   show_pane(Pane::Channel);
-}
-
-void MainWindow::select_tree_kind(int kind)
-{
-  suppress_tree_ = true;
-  tree_store_->foreach_iter([this, kind](const Gtk::TreeModel::iterator& it) {
-    if ((*it)[col_tree_kind_] == kind) {
-      const Gtk::TreeModel::Path path(it);
-      tree_view_.get_selection()->select(it);
-      tree_view_.scroll_to_row(path);
-      return true;
-    }
-    return false;
-  });
-  suppress_tree_ = false;
 }
 
 void MainWindow::refresh_nicks()
@@ -444,7 +479,15 @@ void MainWindow::handle_command(const Glib::ustring& line)
 
 void MainWindow::on_servers()
 {
-  show_not_yet("Servers");
+  if (session_ && session_->running()) {
+    Gtk::MessageDialog dlg(*this, "Disconnect before editing servers.", false, Gtk::MESSAGE_INFO,
+                           Gtk::BUTTONS_OK, true);
+    dlg.run();
+    return;
+  }
+  ServersDialog dlg(*this, settings_);
+  dlg.run();
+  fill_tree_idle();
 }
 
 void MainWindow::on_connect()
@@ -452,29 +495,40 @@ void MainWindow::on_connect()
   if (session_ && session_->running())
     return;
 
-  ConnectDialog dlg(*this);
-  if (dlg.run() != Gtk::RESPONSE_OK)
+  const Server* s = selected_server();
+  if (!s)
+    s = settings_.find_id(settings_.last_server);
+  if (!s && !settings_.servers.empty())
+    s = &settings_.servers.front();
+  if (!s) {
+    on_servers();
     return;
-
-  const Glib::ustring host = dlg.host();
-  const Glib::ustring nick = dlg.nick();
-  if (host.empty() || nick.empty()) {
-    Gtk::MessageDialog err(*this, "Host and nick are required.", false, Gtk::MESSAGE_ERROR,
+  }
+  if (s->host.empty()) {
+    Gtk::MessageDialog err(*this, "That server has no host.", false, Gtk::MESSAGE_ERROR,
                            Gtk::BUTTONS_OK, true);
     err.run();
     return;
   }
 
-  connected_host_ = host;
+  Glib::ustring nick = s->nick.empty() ? settings_.nick : s->nick;
+  if (nick.empty())
+    nick = Settings::default_nick();
+
+  connected_host_ = s->host;
   connected_nick_ = nick;
+  connected_server_id_ = s->id;
+  settings_.last_server = s->id;
+  settings_.save();
+
   registered_ = false;
   reset_channel();
   status_buf_->set_text("");
   show_pane(Pane::Status);
   fill_tree_connected();
-  select_tree_kind(1);
-  set_status(Glib::ustring("Connecting to ") + host + "…");
-  set_title("Partyline — " + nick + " @ " + host);
+  select_tree(1, connected_server_id_);
+  set_status(Glib::ustring("Connecting to ") + s->name + "…");
+  set_title("Partyline — " + nick + " @ " + s->name);
   btn_connect_.set_sensitive(false);
   btn_disconnect_.set_sensitive(true);
 
@@ -487,7 +541,8 @@ void MainWindow::on_connect()
   session_->signal_part.connect(sigc::mem_fun(*this, &MainWindow::on_session_part));
   session_->signal_quit_nick.connect(sigc::mem_fun(*this, &MainWindow::on_session_quit));
   session_->signal_names.connect(sigc::mem_fun(*this, &MainWindow::on_session_names));
-  session_->start(host.raw(), dlg.port(), dlg.tls(), nick.raw(), nick.raw());
+  session_->start(s->host, static_cast<guint16>(s->port), s->tls, nick.raw(),
+                  settings_.realname.empty() ? nick.raw() : settings_.realname);
 }
 
 void MainWindow::on_disconnect()
@@ -544,6 +599,9 @@ void MainWindow::on_session_registered()
   registered_ = true;
   if (session_)
     connected_nick_ = session_->nick();
+  settings_.nick = connected_nick_.raw();
+  settings_.last_server = connected_server_id_.raw();
+  settings_.save();
   btn_join_.set_sensitive(true);
   input_.set_sensitive(true);
   btn_send_.set_sensitive(true);
@@ -588,7 +646,7 @@ void MainWindow::on_session_part(const Glib::ustring& channel, const Glib::ustri
     append_channel("* You have left " + channel);
     reset_channel();
     fill_tree_connected();
-    select_tree_kind(1);
+    select_tree(1, connected_server_id_);
     show_pane(Pane::Status);
     set_status(connected_nick_ + " @ " + connected_host_ + "  tls");
     return;

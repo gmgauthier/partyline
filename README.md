@@ -10,7 +10,7 @@ LCOS itself: [https://github.com/BryanLunduke/LCOS](https://github.com/BryanLund
 
 ## Status
 
-**M2 in tree.** Connect, join one channel, talk, nick list. Several channels at once is M4.
+**M3 in tree.** Server list (ini + Servers…). Connect to the selected server. Join one channel. Several channels at once is M4.
 
 | Doc | What |
 |---|---|

@@ -36,6 +36,8 @@ executable(
   'src/connect_dialog.cpp',
   'src/join_dialog.cpp',
   'src/irc_session.cpp',
+  'src/settings.cpp',
+  'src/servers_dialog.cpp',
   include_directories: inc,
   dependencies: [gtkmm],
   install: true,
