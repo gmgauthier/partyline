@@ -2,6 +2,8 @@
 
 **Vended by Grok Build**
 
+![Partyline on LCOS](brand/screenshot-about.png)
+
 An **mIRC-shaped IRC client** for The Lunduke Computer Operating System (LCOS). The window is mIRC 5.x / 6, not HexChat.
 
 Binary: `partyline`. Unlicense.
