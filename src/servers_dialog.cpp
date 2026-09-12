@@ -42,6 +42,17 @@ ServersDialog::ServersDialog(Gtk::Window& parent, Settings& settings)
   port_.set_numeric(true);
   tls_.set_active(true);
   tls_verify_.set_active(true);
+  tls_.signal_toggled().connect([this]() {
+    if (suppress_)
+      return;
+    const int p = port_.get_value_as_int();
+    if (tls_.get_active()) {
+      if (p == 6667)
+        port_.set_value(6697);
+    } else if (p == 6697) {
+      port_.set_value(6667);
+    }
+  });
   nick_.set_placeholder_text("blank = default nick");
   default_nick_.set_text(settings_.nick);
   default_nick_.set_max_length(16);
@@ -106,12 +117,14 @@ void ServersDialog::load_row()
     return;
   }
   const Server& s = working_[static_cast<size_t>(current_)];
+  suppress_ = true;
   name_.set_text(s.name);
   host_.set_text(s.host);
   port_.set_value(s.port);
   tls_.set_active(s.tls);
   tls_verify_.set_active(s.tls_verify);
   nick_.set_text(s.nick);
+  suppress_ = false;
 }
 
 void ServersDialog::store_row()
