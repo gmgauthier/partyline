@@ -79,6 +79,7 @@ class IrcSession {
   std::atomic<bool> running_{false};
   Glib::RefPtr<Gio::Cancellable> cancellable_;
   Glib::RefPtr<Gio::OutputStream> out_;
+  Glib::RefPtr<Gio::Socket> sock_;
   std::mutex out_mu_;
   std::thread thread_;
 

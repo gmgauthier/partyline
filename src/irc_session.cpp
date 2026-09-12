@@ -126,22 +126,37 @@ void IrcSession::start(std::string host, guint16 port, bool tls, std::string nic
 
 void IrcSession::stop()
 {
+  /* Do not close() the TLS stream from this thread — GTlsConnection
+   * shutdown can sit on the SocketClient I/O timeout (~30s) after the
+   * window is already gone. Cancel, drop the TCP socket, join. */
   if (cancellable_)
     cancellable_->cancel();
   {
     std::lock_guard<std::mutex> lock(out_mu_);
-    if (out_) {
+    if (sock_) {
       try {
-        const std::string quit = "QUIT :Partyline\r\n";
-        out_->write(quit.data(), quit.size());
+        sock_->set_timeout(1);
+      } catch (...) {
+      }
+      if (out_) {
+        try {
+          const std::string quit = "QUIT :Partyline\r\n";
+          gsize n = 0;
+          out_->write_all(quit.data(), quit.size(), n);
+        } catch (...) {
+        }
+      }
+      try {
+        sock_->shutdown(true, true);
       } catch (...) {
       }
       try {
-        out_->close();
+        sock_->close();
       } catch (...) {
       }
-      out_.reset();
+      sock_.reset();
     }
+    out_.reset();
   }
   if (thread_.joinable())
     thread_.join();
@@ -369,7 +384,6 @@ void IrcSession::thread_main()
   try {
     auto client = Gio::SocketClient::create();
     client->set_tls(tls_);
-    client->set_timeout(30);
     enqueue({Event::Line,
              std::string(tls_ ? "Connecting (TLS) to " : "Connecting to ") + host_ + ":" +
                  std::to_string(port_) + " as " + nick() + "…",
@@ -379,10 +393,11 @@ void IrcSession::thread_main()
              {}});
 
     auto conn = client->connect_to_host(host_, port_, cancellable_);
-    if (auto sock = conn->get_socket())
-      sock->set_timeout(0);
     {
       std::lock_guard<std::mutex> lock(out_mu_);
+      sock_ = conn->get_socket();
+      if (sock_)
+        sock_->set_timeout(0);
       out_ = conn->get_output_stream();
     }
 
@@ -413,6 +428,7 @@ void IrcSession::thread_main()
   {
     std::lock_guard<std::mutex> lock(out_mu_);
     out_.reset();
+    sock_.reset();
   }
   running_.store(false);
   enqueue({Event::Finished, finish, {}, {}, false, {}});
