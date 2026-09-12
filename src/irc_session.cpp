@@ -492,6 +492,9 @@ void IrcSession::thread_main()
   try {
     auto client = Gio::SocketClient::create();
     client->set_tls(tls_);
+    /* Connect/handshake only. Cleared on the socket after connect so idle
+     * reads do not die. Filtered ports (Undernet 6697) fail instead of hanging. */
+    client->set_timeout(20);
     if (tls_ && !tls_verify_) {
       const auto flags = static_cast<Gio::TlsCertificateFlags>(
           Gio::TLS_CERTIFICATE_VALIDATE_ALL & ~Gio::TLS_CERTIFICATE_BAD_IDENTITY);
