@@ -396,6 +396,18 @@ void MainWindow::set_status(const Glib::ustring& text)
   status_.push(text, status_ctx_);
 }
 
+void MainWindow::refresh_status_bar()
+{
+  if (!registered_)
+    return;
+  Glib::ustring s = connected_nick_ + " @ " + connected_host_;
+  if (const Chan* ch = find_chan(current_channel_))
+    s += "  " + ch->name + "  " + std::to_string(ch->nicks.size()) + " users";
+  else
+    s += "  tls";
+  set_status(s);
+}
+
 void MainWindow::append_status(const Glib::ustring& text)
 {
   status_buf_->insert(status_buf_->end(), text + "\n");
@@ -432,6 +444,7 @@ void MainWindow::show_pane(Pane pane)
     scroll_end(buffer_);
     refresh_nicks();
   }
+  refresh_status_bar();
 }
 
 void MainWindow::show_not_yet(const Glib::ustring& feature)
@@ -521,8 +534,10 @@ void MainWindow::add_nick(const Glib::ustring& channel, const Glib::ustring& nic
       return;
   }
   ch->nicks.push_back(nick);
-  if (same_chan(current_channel_, channel))
+  if (same_chan(current_channel_, channel)) {
     refresh_nicks();
+    refresh_status_bar();
+  }
 }
 
 void MainWindow::remove_nick(const Glib::ustring& channel, const Glib::ustring& nick)
@@ -533,8 +548,10 @@ void MainWindow::remove_nick(const Glib::ustring& channel, const Glib::ustring& 
   ch->nicks.erase(std::remove_if(ch->nicks.begin(), ch->nicks.end(),
                                  [&](const Glib::ustring& n) { return nick_eq(n, nick); }),
                   ch->nicks.end());
-  if (same_chan(current_channel_, channel))
+  if (same_chan(current_channel_, channel)) {
     refresh_nicks();
+    refresh_status_bar();
+  }
 }
 
 void MainWindow::drop_channel(const Glib::ustring& channel)
@@ -731,7 +748,7 @@ void MainWindow::on_session_registered()
   btn_join_.set_sensitive(true);
   input_.set_sensitive(true);
   btn_send_.set_sensitive(true);
-  set_status(connected_nick_ + " @ " + connected_host_ + "  tls");
+  refresh_status_bar();
 }
 
 void MainWindow::on_session_finished(const Glib::ustring& reason)
@@ -760,7 +777,6 @@ void MainWindow::on_session_join(const Glib::ustring& channel, const Glib::ustri
     }
     append_channel(channel, "* Now talking in " + channel);
     show_channel(channel);
-    set_status(connected_nick_ + " @ " + connected_host_ + "  " + channel);
     return;
   }
   if (find_chan(channel)) {
@@ -781,7 +797,6 @@ void MainWindow::on_session_part(const Glib::ustring& channel, const Glib::ustri
     else if (was_current) {
       select_tree(1, connected_server_id_);
       show_pane(Pane::Status);
-      set_status(connected_nick_ + " @ " + connected_host_ + "  tls");
     } else if (!current_channel_.empty())
       select_tree(2, connected_server_id_, current_channel_);
     return;
@@ -816,11 +831,9 @@ void MainWindow::on_session_names(const Glib::ustring& channel,
   if (!ch)
     return;
   ch->nicks = nicks;
-  if (same_chan(current_channel_, channel)) {
+  if (same_chan(current_channel_, channel))
     refresh_nicks();
-    set_status(connected_nick_ + " @ " + connected_host_ + "  " + ch->name + "  " +
-               std::to_string(ch->nicks.size()) + " users");
-  }
+  refresh_status_bar();
 }
 
 void MainWindow::style_tree_column()

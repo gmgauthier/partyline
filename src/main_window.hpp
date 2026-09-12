@@ -30,6 +30,7 @@ class MainWindow : public Gtk::Window {
   const Server* selected_server();
   void select_tree(int kind, const Glib::ustring& server_id, const Glib::ustring& channel = {});
   void set_status(const Glib::ustring& text);
+  void refresh_status_bar();
   void append_status(const Glib::ustring& text);
   void append_channel(const Glib::ustring& channel, const Glib::ustring& text);
   void show_pane(Pane pane);
