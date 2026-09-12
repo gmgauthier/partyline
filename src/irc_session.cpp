@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Unlicense */
 
 #include "irc_session.hpp"
+#include "config.hpp"
 
 namespace partyline {
 namespace {
@@ -9,6 +10,42 @@ void trim_cr(std::string& s)
 {
   while (!s.empty() && (s.back() == '\r' || s.back() == '\n'))
     s.pop_back();
+}
+
+std::string prefix_nick(const std::string& line)
+{
+  if (line.empty() || line[0] != ':')
+    return {};
+  const auto bang = line.find('!');
+  const auto sp = line.find(' ');
+  auto end = bang;
+  if (end == std::string::npos || (sp != std::string::npos && bang > sp))
+    end = sp;
+  if (end == std::string::npos)
+    return {};
+  return line.substr(1, end - 1);
+}
+
+std::string ping_payload(const std::string& line)
+{
+  auto s = line;
+  if (!s.empty() && s[0] == ':') {
+    const auto sp = s.find(' ');
+    s = sp == std::string::npos ? std::string() : s.substr(sp + 1);
+  }
+  if (s.compare(0, 5, "PING ") == 0)
+    s = s.substr(5);
+  return s;
+}
+
+bool is_ctcp_version(const std::string& line, const std::string& cmd)
+{
+  if (cmd != "PRIVMSG")
+    return false;
+  const auto ctcp = line.find('\x01');
+  if (ctcp == std::string::npos)
+    return false;
+  return line.compare(ctcp, 8, "\x01VERSION") == 0;
 }
 
 }  // namespace
@@ -138,6 +175,9 @@ void IrcSession::thread_main()
                               ":" + std::to_string(port_) + " as " + nick_ + "…"});
 
     auto conn = client->connect_to_host(host_, port_, cancellable_);
+    /* Connect may use a 30s timeout. Idle IRC is quiet; do not time out reads. */
+    if (auto sock = conn->get_socket())
+      sock->set_timeout(0);
     {
       std::lock_guard<std::mutex> lock(out_mu_);
       out_ = conn->get_output_stream();
@@ -156,15 +196,12 @@ void IrcSession::thread_main()
           continue;
 
         const std::string cmd = command_of(line);
-        if (cmd == "PING") {
-          auto payload = line;
-          if (!payload.empty() && payload[0] == ':') {
-            const auto sp = payload.find(' ');
-            payload = sp == std::string::npos ? std::string() : payload.substr(sp + 1);
-          }
-          if (payload.compare(0, 5, "PING ") == 0)
-            payload = payload.substr(5);
-          write_line("PONG " + payload);
+        if (cmd == "PING")
+          write_line("PONG " + ping_payload(line));
+        else if (is_ctcp_version(line, cmd)) {
+          const std::string from = prefix_nick(line);
+          if (!from.empty())
+            write_line("NOTICE " + from + " :\x01VERSION Partyline " VERSION "\x01");
         }
 
         enqueue({Event::Line, line});
