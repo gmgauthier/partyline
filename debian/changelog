@@ -1,3 +1,11 @@
+partyline (0.1.1-1) unstable; urgency=medium
+
+  * Nav lists: paint hover/sticky on tree and nick list (Adwaita/i3).
+  * Default server list, TLS hostname verify, connect timeout, UTF-8
+    sanitization, Eggshell palette, TLS checkbox flips 6667/6697.
+
+ -- Greg Gauthier <gmgauthier@protonmail.com>  Sat, 12 Sep 2026 17:31:50 +0100
+
 partyline (0.1.0-1) unstable; urgency=medium
 
   * Initial package. gtkmm-3 mIRC-shaped IRC client for LCOS

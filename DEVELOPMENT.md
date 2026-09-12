@@ -9,7 +9,7 @@ Repos: https://gitea.scriptorium/gmgauthier/partyline (origin), https://github.c
 
 ## Status (2026-09-12)
 
-**M6 / v0.1.0.** Packaged. Keys, palettes (white / eggshell / black / navy / olive), lag, `/msg` `/quote` `/nick`.
+**v0.1.1.** Packaged. Keys, palettes, lag, `/msg` `/quote` `/nick`. Nav hover/sticky works on Adwaita.
 
 ## 1. Locked decisions
 
@@ -115,7 +115,7 @@ v1 is M0 through M6. Do not open M7+ until this set has been lived with.
 | **M3 — Server list** | Ini + Servers… dialog. Seed Libera / OFTC. Last nick remembered. **Done.** |
 | **M4 — Several channels** | Two channels on one server; tree switches buffers; the other stays joined. **Done.** |
 | **M5 — Polish** | Keys, status `tls` / lag / usercount, `/msg` `/quote` `/nick`. Chat pane palettes. **Done.** |
-| **M6 — Package** | `debian/`, `scripts/release.sh` → `.deb`, tarball, AppImage. Tag `v0.1.0`. **In tree.** |
+| **M6 — Package** | `debian/`, `scripts/release.sh` → `.deb`, tarball, AppImage. Tag `v0.1.1`. **Done.** |
 
 After v1: SASL, query windows, channel logs, highlight, notify, DCC, ident, auto-join, `/whois`. Chat palettes ship in **M5** if they fit; extra skins wait.
 
