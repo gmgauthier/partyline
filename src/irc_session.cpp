@@ -69,6 +69,63 @@ bool is_ctcp_version(const std::string& text)
   return text.compare(0, 8, "\x01VERSION") == 0;
 }
 
+std::string strip_irc_format(const std::string& in)
+{
+  std::string out;
+  out.reserve(in.size());
+  for (size_t i = 0; i < in.size();) {
+    const unsigned char c = static_cast<unsigned char>(in[i]);
+    if (c == 0x02 || c == 0x0F || c == 0x16 || c == 0x1D || c == 0x1F || c == 0x01) {
+      ++i;
+      continue;
+    }
+    if (c == 0x03) {
+      ++i;
+      int n = 0;
+      while (n < 2 && i < in.size() && in[i] >= '0' && in[i] <= '9') {
+        ++i;
+        ++n;
+      }
+      if (i < in.size() && in[i] == ',') {
+        ++i;
+        n = 0;
+        while (n < 2 && i < in.size() && in[i] >= '0' && in[i] <= '9') {
+          ++i;
+          ++n;
+        }
+      }
+      continue;
+    }
+    out.push_back(in[i]);
+    ++i;
+  }
+  return out;
+}
+
+std::string utf8_clean(std::string s)
+{
+  s = strip_irc_format(s);
+  if (s.empty() || g_utf8_validate(s.data(), static_cast<gssize>(s.size()), nullptr))
+    return s;
+  GError* err = nullptr;
+  gsize out_len = 0;
+  gchar* conv = g_convert(s.data(), static_cast<gssize>(s.size()), "UTF-8", "ISO-8859-1",
+                          nullptr, &out_len, &err);
+  if (conv && !err) {
+    std::string out(conv, out_len);
+    g_free(conv);
+    return out;
+  }
+  if (err)
+    g_error_free(err);
+  if (conv)
+    g_free(conv);
+  gchar* valid = g_utf8_make_valid(s.data(), static_cast<gssize>(s.size()));
+  std::string out = valid ? valid : std::string();
+  g_free(valid);
+  return out;
+}
+
 void split_nicks(const std::string& names, std::vector<std::string>& out)
 {
   size_t i = 0;
@@ -208,6 +265,11 @@ void IrcSession::send_lag_ping()
 
 void IrcSession::enqueue(Event ev)
 {
+  ev.text = utf8_clean(std::move(ev.text));
+  ev.channel = utf8_clean(std::move(ev.channel));
+  ev.nick = utf8_clean(std::move(ev.nick));
+  for (auto& n : ev.nicks)
+    n = utf8_clean(std::move(n));
   {
     std::lock_guard<std::mutex> lock(q_mu_);
     q_.push(std::move(ev));

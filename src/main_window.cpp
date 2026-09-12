@@ -75,6 +75,17 @@ void scroll_end(Gtk::TextView& view)
   buf->delete_mark(mark);
 }
 
+Glib::ustring ensure_utf8(const Glib::ustring& text)
+{
+  const std::string raw = text.raw();
+  if (raw.empty() || g_utf8_validate(raw.data(), static_cast<gssize>(raw.size()), nullptr))
+    return text;
+  gchar* v = g_utf8_make_valid(raw.data(), static_cast<gssize>(raw.size()));
+  Glib::ustring u(v ? v : "");
+  g_free(v);
+  return u;
+}
+
 Glib::ustring strip_nick_prefix(const Glib::ustring& n)
 {
   if (n.empty())
@@ -436,7 +447,7 @@ void MainWindow::refresh_status_bar()
 
 void MainWindow::append_status(const Glib::ustring& text)
 {
-  status_buf_->insert(status_buf_->end(), text + "\n");
+  status_buf_->insert(status_buf_->end(), ensure_utf8(text) + "\n");
   if (pane_ == Pane::Status)
     scroll_end(buffer_);
 }
@@ -446,7 +457,7 @@ void MainWindow::append_channel(const Glib::ustring& channel, const Glib::ustrin
   Chan* ch = find_chan(channel);
   if (!ch)
     return;
-  ch->buf->insert(ch->buf->end(), text + "\n");
+  ch->buf->insert(ch->buf->end(), ensure_utf8(text) + "\n");
   if (pane_ == Pane::Channel && same_chan(current_channel_, channel))
     scroll_end(buffer_);
 }
