@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Unlicense */
 
 #include "settings.hpp"
+#include "paths.hpp"
 
 #include <glib.h>
 #include <glibmm/fileutils.h>
@@ -94,12 +95,69 @@ std::string Settings::make_id(const std::string& name)
   return id;
 }
 
+void Settings::load_from_file(const std::string& path, bool personal)
+{
+  Glib::KeyFile kf;
+  try {
+    kf.load_from_file(path);
+  } catch (const Glib::Error&) {
+    return;
+  }
+  if (personal) {
+    const std::string n = get_str(kf, "user", "nick");
+    if (!n.empty())
+      nick = n;
+    const std::string rn = get_str(kf, "user", "realname");
+    if (!rn.empty())
+      realname = rn;
+    last_server = get_str(kf, "user", "last_server");
+    window_w = get_int(kf, "ui", "width", window_w);
+    window_h = get_int(kf, "ui", "height", window_h);
+  }
+  palette = get_int(kf, "ui", "palette", palette);
+  if (window_w < 400)
+    window_w = 400;
+  if (window_h < 300)
+    window_h = 300;
+  if (palette < 0 || palette > 4)
+    palette = 0;
+
+  servers.clear();
+  for (const Glib::ustring& group : kf.get_groups()) {
+    const std::string g = group.raw();
+    if (g.compare(0, 7, "server.") != 0)
+      continue;
+    Server s;
+    s.id = g.substr(7);
+    s.name = get_str(kf, group, "name");
+    if (s.name.empty())
+      s.name = s.id;
+    s.host = get_str(kf, group, "host");
+    s.port = get_int(kf, group.raw().c_str(), "port", 6697);
+    if (s.port < 1 || s.port > 65535)
+      s.port = 6697;
+    s.tls = get_bool(kf, group.raw().c_str(), "tls", true);
+    s.tls_verify = get_bool(kf, group.raw().c_str(), "tls_verify", true);
+    s.nick = get_str(kf, group, "nick");
+    if (!s.host.empty())
+      servers.push_back(std::move(s));
+  }
+}
+
 void Settings::seed_if_empty()
 {
   if (!servers.empty())
     return;
-  servers.push_back({"libera", "Libera", "irc.libera.chat", 6697, true, true, {}});
+  const std::string bundled = find_data_file("partyline.ini");
+  if (!bundled.empty())
+    load_from_file(bundled, false);
+  if (!servers.empty())
+    return;
+  servers.push_back({"undernet", "Undernet", "irc.undernet.org", 6667, false, true, {}});
+  servers.push_back({"efnet", "EFNet", "irc.efnet.nl", 6697, true, true, {}});
   servers.push_back({"oftc", "OFTC", "irc.oftc.net", 6697, true, true, {}});
+  servers.push_back({"rizon_uk", "Rizon UK", "irc.rizon.net", 6697, true, true, {}});
+  servers.push_back({"libera", "Libera", "irc.libera.chat", 6697, true, true, {}});
 }
 
 Server* Settings::find_id(const std::string& id)
@@ -124,51 +182,8 @@ void Settings::load()
 {
   if (nick.empty())
     nick = default_nick();
-  Glib::KeyFile kf;
-  try {
-    kf.load_from_file(config_path());
-  } catch (const Glib::Error&) {
-    seed_if_empty();
-    return;
-  }
-  const std::string n = get_str(kf, "user", "nick");
-  if (!n.empty())
-    nick = n;
-  const std::string rn = get_str(kf, "user", "realname");
-  if (!rn.empty())
-    realname = rn;
-  last_server = get_str(kf, "user", "last_server");
-  window_w = get_int(kf, "ui", "width", window_w);
-  window_h = get_int(kf, "ui", "height", window_h);
-  palette = get_int(kf, "ui", "palette", palette);
-  if (window_w < 400)
-    window_w = 400;
-  if (window_h < 300)
-    window_h = 300;
-  if (palette < 0 || palette > 4)
-    palette = 0;
-
-  servers.clear();
-  for (const Glib::ustring& group : kf.get_groups()) {
-    const std::string g = group.raw();
-    const char prefix[] = "server.";
-    if (g.compare(0, 7, prefix) != 0)
-      continue;
-    Server s;
-    s.id = g.substr(7);
-    s.name = get_str(kf, group, "name");
-    if (s.name.empty())
-      s.name = s.id;
-    s.host = get_str(kf, group, "host");
-    s.port = get_int(kf, group.raw().c_str(), "port", 6697);
-    if (s.port < 1 || s.port > 65535)
-      s.port = 6697;
-    s.tls = get_bool(kf, group.raw().c_str(), "tls", true);
-    s.tls_verify = get_bool(kf, group.raw().c_str(), "tls_verify", true);
-    s.nick = get_str(kf, group, "nick");
-    if (!s.host.empty())
-      servers.push_back(std::move(s));
-  }
+  if (Glib::file_test(config_path(), Glib::FILE_TEST_IS_REGULAR))
+    load_from_file(config_path(), true);
   seed_if_empty();
 }
 

@@ -29,6 +29,7 @@ struct Settings {
   void load();
   void save() const;
   void seed_if_empty();
+  void load_from_file(const std::string& path, bool personal);
   Server* find_id(const std::string& id);
   const Server* find_id(const std::string& id) const;
   static std::string make_id(const std::string& name);

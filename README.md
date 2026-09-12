@@ -12,6 +12,8 @@ LCOS itself: [https://github.com/BryanLunduke/LCOS](https://github.com/BryanLund
 
 **M5 in tree.** Multi-channel, palettes, lag, `/nick` `/msg`. Package is M6.
 
+First run (no `~/.config/partyline/partyline.ini`) loads the shipped server list from `data/partyline.ini` (Undernet, EFNet, OFTC, Rizon UK, Libera). Nick comes from the local username.
+
 | Doc | What |
 |---|---|
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Locked decisions, architecture, milestones M0–M6 |

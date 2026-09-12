@@ -50,6 +50,11 @@ install_data(
 )
 
 install_data(
+  'data/partyline.ini',
+  install_dir: get_option('datadir') / 'partyline',
+)
+
+install_data(
   'data/skin/lcos/lcos.css',
   install_dir: get_option('datadir') / 'partyline' / 'skin' / 'lcos',
 )
