@@ -9,7 +9,7 @@ Repos: https://gitea.scriptorium/gmgauthier/partyline (origin), https://github.c
 
 ## Status (2026-09-12)
 
-**M1 in tree.** TLS connect to a typed host:port as nick. Status buffer shows motd / errors. Disconnect. Join is M2.
+**M2 in tree.** One channel: Join… / `/join`, PRIVMSG in and out, nick list from `353`. Several channels at once is M4.
 
 ## 1. Locked decisions
 
@@ -110,8 +110,8 @@ v1 is M0 through M6. Do not open M7+ until this set has been lived with.
 | Milestone | Done when |
 |---|---|
 | **M0 — Window** | Menus, toolbar, paned tree/buffer/nicks, About, CSS. Matches the ASCII mock. No socket. **Done.** |
-| **M1 — One server** | TLS connect to a typed host:port as nick. Status shows motd / errors. Disconnect. **In tree.** |
-| **M2 — One channel** | `/join` or Join…. PRIVMSG in and out. Nick list from `353`. |
+| **M1 — One server** | TLS connect to a typed host:port as nick. Status shows motd / errors. Disconnect. **Done.** |
+| **M2 — One channel** | `/join` or Join…. PRIVMSG in and out. Nick list from `353`. **In tree.** |
 | **M3 — Server list** | Ini + Servers… dialog. Seed Libera / OFTC. Last nick remembered. |
 | **M4 — Several channels** | Two channels on one server; tree switches buffers; the other stays joined. |
 | **M5 — Polish** | Keys, status `tls` / lag / usercount, `/msg` `/quote` `/nick`. |

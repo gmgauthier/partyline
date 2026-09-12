@@ -3,6 +3,8 @@
 #include "irc_session.hpp"
 #include "config.hpp"
 
+#include <glib.h>
+
 namespace partyline {
 namespace {
 
@@ -12,18 +14,42 @@ void trim_cr(std::string& s)
     s.pop_back();
 }
 
-std::string prefix_nick(const std::string& line)
+struct Parsed {
+  std::string nick;
+  std::string cmd;
+  std::vector<std::string> params;
+};
+
+Parsed parse_irc(const std::string& line)
 {
-  if (line.empty() || line[0] != ':')
-    return {};
-  const auto bang = line.find('!');
-  const auto sp = line.find(' ');
-  auto end = bang;
-  if (end == std::string::npos || (sp != std::string::npos && bang > sp))
-    end = sp;
-  if (end == std::string::npos)
-    return {};
-  return line.substr(1, end - 1);
+  Parsed p;
+  size_t i = 0;
+  if (!line.empty() && line[0] == ':') {
+    const auto sp = line.find(' ');
+    const std::string prefix = line.substr(1, sp == std::string::npos ? std::string::npos : sp - 1);
+    const auto bang = prefix.find('!');
+    p.nick = bang == std::string::npos ? prefix : prefix.substr(0, bang);
+    i = sp == std::string::npos ? line.size() : sp + 1;
+    while (i < line.size() && line[i] == ' ')
+      ++i;
+  }
+  const auto sp = line.find(' ', i);
+  p.cmd = line.substr(i, sp == std::string::npos ? std::string::npos : sp - i);
+  i = sp == std::string::npos ? line.size() : sp + 1;
+  while (i < line.size()) {
+    while (i < line.size() && line[i] == ' ')
+      ++i;
+    if (i >= line.size())
+      break;
+    if (line[i] == ':') {
+      p.params.push_back(line.substr(i + 1));
+      break;
+    }
+    const auto nsp = line.find(' ', i);
+    p.params.push_back(line.substr(i, nsp == std::string::npos ? std::string::npos : nsp - i));
+    i = nsp == std::string::npos ? line.size() : nsp + 1;
+  }
+  return p;
 }
 
 std::string ping_payload(const std::string& line)
@@ -38,14 +64,27 @@ std::string ping_payload(const std::string& line)
   return s;
 }
 
-bool is_ctcp_version(const std::string& line, const std::string& cmd)
+bool is_ctcp_version(const std::string& text)
 {
-  if (cmd != "PRIVMSG")
-    return false;
-  const auto ctcp = line.find('\x01');
-  if (ctcp == std::string::npos)
-    return false;
-  return line.compare(ctcp, 8, "\x01VERSION") == 0;
+  return text.compare(0, 8, "\x01VERSION") == 0;
+}
+
+void split_nicks(const std::string& names, std::vector<std::string>& out)
+{
+  size_t i = 0;
+  while (i < names.size()) {
+    while (i < names.size() && names[i] == ' ')
+      ++i;
+    if (i >= names.size())
+      break;
+    auto nsp = names.find(' ', i);
+    if (nsp == std::string::npos)
+      nsp = names.size();
+    std::string n = names.substr(i, nsp - i);
+    if (!n.empty())
+      out.push_back(std::move(n));
+    i = nsp;
+  }
 }
 
 }  // namespace
@@ -60,6 +99,12 @@ IrcSession::~IrcSession()
   stop();
 }
 
+std::string IrcSession::nick() const
+{
+  std::lock_guard<std::mutex> lock(nick_mu_);
+  return nick_;
+}
+
 void IrcSession::start(std::string host, guint16 port, bool tls, std::string nick,
                        std::string realname)
 {
@@ -67,8 +112,13 @@ void IrcSession::start(std::string host, guint16 port, bool tls, std::string nic
   host_ = std::move(host);
   port_ = port == 0 ? (tls ? 6697 : 6667) : port;
   tls_ = tls;
-  nick_ = std::move(nick);
-  realname_ = realname.empty() ? nick_ : std::move(realname);
+  {
+    std::lock_guard<std::mutex> lock(nick_mu_);
+    nick_ = std::move(nick);
+    realname_ = realname.empty() ? nick_ : std::move(realname);
+  }
+  names_acc_.clear();
+  names_chan_.clear();
   cancellable_ = Gio::Cancellable::create();
   running_.store(true);
   thread_ = std::thread(&IrcSession::thread_main, this);
@@ -97,6 +147,34 @@ void IrcSession::stop()
     thread_.join();
   running_.store(false);
   cancellable_.reset();
+}
+
+void IrcSession::join(const std::string& channel)
+{
+  if (!channel.empty())
+    write_line("JOIN " + channel);
+}
+
+void IrcSession::part(const std::string& channel)
+{
+  if (!channel.empty())
+    write_line("PART " + channel);
+}
+
+void IrcSession::privmsg(const std::string& target, const std::string& text)
+{
+  if (target.empty() || text.empty())
+    return;
+  std::string body = text;
+  if (body.size() > 400)
+    body.resize(400);
+  write_line("PRIVMSG " + target + " :" + body);
+}
+
+void IrcSession::quote(const std::string& raw)
+{
+  if (!raw.empty())
+    write_line(raw);
 }
 
 void IrcSession::enqueue(Event ev)
@@ -130,6 +208,26 @@ void IrcSession::on_dispatch()
         running_.store(false);
         signal_finished.emit(ev.text);
         break;
+      case Event::Privmsg:
+        signal_privmsg.emit(ev.channel, ev.nick, ev.text);
+        break;
+      case Event::Join:
+        signal_join.emit(ev.channel, ev.nick, ev.me);
+        break;
+      case Event::Part:
+        signal_part.emit(ev.channel, ev.nick, ev.me);
+        break;
+      case Event::QuitNick:
+        signal_quit_nick.emit(ev.nick);
+        break;
+      case Event::Names: {
+        std::vector<Glib::ustring> nicks;
+        nicks.reserve(ev.nicks.size());
+        for (const auto& n : ev.nicks)
+          nicks.emplace_back(n);
+        signal_names.emit(ev.channel, nicks);
+        break;
+      }
     }
   }
 }
@@ -151,17 +249,118 @@ bool IrcSession::write_line(const std::string& line)
   }
 }
 
-std::string IrcSession::command_of(const std::string& line)
+bool IrcSession::is_me(const std::string& nick) const
 {
-  std::string s = line;
-  if (!s.empty() && s[0] == ':') {
-    const auto sp = s.find(' ');
-    if (sp == std::string::npos)
-      return {};
-    s = s.substr(sp + 1);
+  std::lock_guard<std::mutex> lock(nick_mu_);
+  return g_ascii_strcasecmp(nick.c_str(), nick_.c_str()) == 0;
+}
+
+void IrcSession::handle_line(const std::string& line)
+{
+  const Parsed p = parse_irc(line);
+  const std::string& cmd = p.cmd;
+
+  if (cmd == "PING") {
+    write_line("PONG " + ping_payload(line));
+    enqueue({Event::Line, line, {}, {}, false, {}});
+    return;
   }
-  const auto sp = s.find(' ');
-  return sp == std::string::npos ? s : s.substr(0, sp);
+
+  if (cmd == "PRIVMSG" && p.params.size() >= 2) {
+    const std::string& target = p.params[0];
+    const std::string& text = p.params[1];
+    if (is_ctcp_version(text)) {
+      if (!p.nick.empty())
+        write_line(std::string("NOTICE ") + p.nick + " :\x01VERSION Partyline " VERSION "\x01");
+      enqueue({Event::Line, line, {}, {}, false, {}});
+      return;
+    }
+    if (!text.empty() && text[0] == '\x01') {
+      enqueue({Event::Line, line, {}, {}, false, {}});
+      return;
+    }
+    enqueue({Event::Line, line, {}, {}, false, {}});
+    Event ev;
+    ev.type = Event::Privmsg;
+    ev.channel = target;
+    ev.nick = p.nick;
+    ev.text = text;
+    enqueue(std::move(ev));
+    return;
+  }
+
+  if (cmd == "JOIN" && !p.params.empty()) {
+    Event ev;
+    ev.type = Event::Join;
+    ev.channel = p.params[0];
+    ev.nick = p.nick;
+    ev.me = is_me(p.nick);
+    enqueue({Event::Line, line, {}, {}, false, {}});
+    enqueue(std::move(ev));
+    return;
+  }
+
+  if ((cmd == "PART" || cmd == "KICK") && !p.params.empty()) {
+    Event ev;
+    ev.type = Event::Part;
+    ev.channel = p.params[0];
+    ev.nick = (cmd == "KICK" && p.params.size() >= 2) ? p.params[1] : p.nick;
+    ev.me = is_me(ev.nick);
+    enqueue({Event::Line, line, {}, {}, false, {}});
+    enqueue(std::move(ev));
+    return;
+  }
+
+  if (cmd == "QUIT") {
+    enqueue({Event::Line, line, {}, {}, false, {}});
+    Event ev;
+    ev.type = Event::QuitNick;
+    ev.nick = p.nick;
+    enqueue(std::move(ev));
+    return;
+  }
+
+  if (cmd == "353" && p.params.size() >= 3) {
+    const std::string chan = p.params[p.params.size() - 2];
+    const std::string names = p.params.back();
+    if (g_ascii_strcasecmp(chan.c_str(), names_chan_.c_str()) != 0) {
+      names_chan_ = chan;
+      names_acc_.clear();
+    }
+    split_nicks(names, names_acc_);
+    enqueue({Event::Line, line, {}, {}, false, {}});
+    return;
+  }
+
+  if (cmd == "366" && p.params.size() >= 2) {
+    Event ev;
+    ev.type = Event::Names;
+    ev.channel = p.params[1];
+    ev.nicks = names_acc_;
+    names_acc_.clear();
+    names_chan_.clear();
+    enqueue({Event::Line, line, {}, {}, false, {}});
+    enqueue(std::move(ev));
+    return;
+  }
+
+  if (cmd == "001") {
+    if (!p.params.empty()) {
+      std::lock_guard<std::mutex> lock(nick_mu_);
+      nick_ = p.params[0];
+    }
+    enqueue({Event::Line, line, {}, {}, false, {}});
+    enqueue({Event::Registered, {}, {}, {}, false, {}});
+    return;
+  }
+
+  enqueue({Event::Line, line, {}, {}, false, {}});
+  if (cmd == "ERROR") {
+    Event ev;
+    ev.type = Event::Finished;
+    ev.text = line;
+    /* ERROR still goes through the read loop; finish message is remembered by caller. */
+  }
 }
 
 void IrcSession::thread_main()
@@ -171,11 +370,15 @@ void IrcSession::thread_main()
     auto client = Gio::SocketClient::create();
     client->set_tls(tls_);
     client->set_timeout(30);
-    enqueue({Event::Line, std::string(tls_ ? "Connecting (TLS) to " : "Connecting to ") + host_ +
-                              ":" + std::to_string(port_) + " as " + nick_ + "…"});
+    enqueue({Event::Line,
+             std::string(tls_ ? "Connecting (TLS) to " : "Connecting to ") + host_ + ":" +
+                 std::to_string(port_) + " as " + nick() + "…",
+             {},
+             {},
+             false,
+             {}});
 
     auto conn = client->connect_to_host(host_, port_, cancellable_);
-    /* Connect may use a 30s timeout. Idle IRC is quiet; do not time out reads. */
     if (auto sock = conn->get_socket())
       sock->set_timeout(0);
     {
@@ -183,8 +386,8 @@ void IrcSession::thread_main()
       out_ = conn->get_output_stream();
     }
 
-    if (!write_line("NICK " + nick_) ||
-        !write_line("USER " + nick_ + " 0 * :" + realname_)) {
+    const std::string n = nick();
+    if (!write_line("NICK " + n) || !write_line("USER " + n + " 0 * :" + realname_)) {
       finish = "Could not send NICK/USER.";
     } else {
       auto in = Gio::DataInputStream::create(conn->get_input_stream());
@@ -194,22 +397,10 @@ void IrcSession::thread_main()
         trim_cr(line);
         if (line.empty())
           continue;
-
-        const std::string cmd = command_of(line);
-        if (cmd == "PING")
-          write_line("PONG " + ping_payload(line));
-        else if (is_ctcp_version(line, cmd)) {
-          const std::string from = prefix_nick(line);
-          if (!from.empty())
-            write_line("NOTICE " + from + " :\x01VERSION Partyline " VERSION "\x01");
-        }
-
-        enqueue({Event::Line, line});
-
-        if (cmd == "001")
-          enqueue({Event::Registered, {}});
-        if (cmd == "ERROR")
+        const Parsed p = parse_irc(line);
+        if (p.cmd == "ERROR")
           finish = line;
+        handle_line(line);
       }
     }
   } catch (const Glib::Error& e) {
@@ -224,7 +415,7 @@ void IrcSession::thread_main()
     out_.reset();
   }
   running_.store(false);
-  enqueue({Event::Finished, finish});
+  enqueue({Event::Finished, finish, {}, {}, false, {}});
 }
 
 }  // namespace partyline

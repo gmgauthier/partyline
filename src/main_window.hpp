@@ -7,6 +7,7 @@
 #include <gtkmm.h>
 
 #include <memory>
+#include <vector>
 
 namespace partyline {
 
@@ -16,24 +17,47 @@ class MainWindow : public Gtk::Window {
   ~MainWindow() override;
 
  private:
+  enum class Pane { Status, Channel };
+
   void load_css();
   void build_menu();
   void build_toolbar();
   void build_body();
-  void fill_tree();
+  void fill_tree_idle();
+  void fill_tree_connected();
   void set_status(const Glib::ustring& text);
-  void append_line(const Glib::ustring& text);
+  void append_status(const Glib::ustring& text);
+  void append_channel(const Glib::ustring& text);
+  void show_pane(Pane pane);
   void show_not_yet(const Glib::ustring& feature);
   void set_connected_ui(bool on);
+  void reset_channel();
+  void ensure_channel_row();
+  void select_tree_kind(int kind);
+  void refresh_nicks();
+  void add_nick(const Glib::ustring& nick);
+  void remove_nick(const Glib::ustring& nick);
+  Glib::ustring normalize_channel(Glib::ustring c) const;
+  bool same_chan(const Glib::ustring& a, const Glib::ustring& b) const;
+  void do_join(const Glib::ustring& channel);
+  void handle_command(const Glib::ustring& line);
   void on_servers();
   void on_connect();
   void on_disconnect();
   void on_join();
+  void on_send();
   void on_quit();
   void on_about();
   void on_session_line(const Glib::ustring& text);
   void on_session_registered();
   void on_session_finished(const Glib::ustring& reason);
+  void on_session_privmsg(const Glib::ustring& target, const Glib::ustring& nick,
+                          const Glib::ustring& text);
+  void on_session_join(const Glib::ustring& channel, const Glib::ustring& nick, bool me);
+  void on_session_part(const Glib::ustring& channel, const Glib::ustring& nick, bool me);
+  void on_session_quit(const Glib::ustring& nick);
+  void on_session_names(const Glib::ustring& channel, const std::vector<Glib::ustring>& nicks);
+  void on_tree_cursor();
   void on_toggle_tree();
   void on_toggle_nicks();
   void on_toggle_status();
@@ -71,16 +95,24 @@ class MainWindow : public Gtk::Window {
 
   Glib::RefPtr<Gtk::TreeStore> tree_store_;
   Gtk::TreeModelColumn<Glib::ustring> col_tree_name_;
+  Gtk::TreeModelColumn<int> col_tree_kind_;
   Gtk::TreeModelColumnRecord tree_cols_;
 
   Glib::RefPtr<Gtk::ListStore> nick_store_;
   Gtk::TreeModelColumn<Glib::ustring> col_nick_;
   Gtk::TreeModelColumnRecord nick_cols_;
 
+  Glib::RefPtr<Gtk::TextBuffer> status_buf_;
+  Glib::RefPtr<Gtk::TextBuffer> channel_buf_;
+
   std::unique_ptr<IrcSession> session_;
   Glib::ustring connected_host_;
   Glib::ustring connected_nick_;
+  Glib::ustring channel_name_;
+  std::vector<Glib::ustring> nicks_;
   bool registered_ = false;
+  bool suppress_tree_ = false;
+  Pane pane_ = Pane::Status;
 };
 
 }  // namespace partyline

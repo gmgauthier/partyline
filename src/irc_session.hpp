@@ -11,6 +11,7 @@
 #include <queue>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace partyline {
 
@@ -26,28 +27,54 @@ class IrcSession {
              std::string realname);
   void stop();
   bool running() const { return running_.load(); }
+  std::string nick() const;
+
+  void join(const std::string& channel);
+  void part(const std::string& channel);
+  void privmsg(const std::string& target, const std::string& text);
+  void quote(const std::string& raw);
 
   sigc::signal<void, Glib::ustring> signal_line;
   sigc::signal<void> signal_registered;
   sigc::signal<void, Glib::ustring> signal_finished;
+  sigc::signal<void, Glib::ustring, Glib::ustring, Glib::ustring> signal_privmsg;
+  sigc::signal<void, Glib::ustring, Glib::ustring, bool> signal_join;
+  sigc::signal<void, Glib::ustring, Glib::ustring, bool> signal_part;
+  sigc::signal<void, Glib::ustring> signal_quit_nick;
+  sigc::signal<void, Glib::ustring, std::vector<Glib::ustring>> signal_names;
 
  private:
   struct Event {
-    enum Type { Line, Registered, Finished } type = Line;
+    enum Type {
+      Line,
+      Registered,
+      Finished,
+      Privmsg,
+      Join,
+      Part,
+      QuitNick,
+      Names
+    } type = Line;
     std::string text;
+    std::string channel;
+    std::string nick;
+    bool me = false;
+    std::vector<std::string> nicks;
   };
 
   void thread_main();
   void enqueue(Event ev);
   void on_dispatch();
   bool write_line(const std::string& line);
-  static std::string command_of(const std::string& line);
+  void handle_line(const std::string& line);
+  bool is_me(const std::string& nick) const;
 
   std::string host_;
   guint16 port_ = 6697;
   bool tls_ = true;
   std::string nick_;
   std::string realname_;
+  mutable std::mutex nick_mu_;
 
   std::atomic<bool> running_{false};
   Glib::RefPtr<Gio::Cancellable> cancellable_;
@@ -58,6 +85,9 @@ class IrcSession {
   std::mutex q_mu_;
   std::queue<Event> q_;
   Glib::Dispatcher dispatcher_;
+
+  std::string names_chan_;
+  std::vector<std::string> names_acc_;
 };
 
 }  // namespace partyline

@@ -10,7 +10,7 @@ LCOS itself: [https://github.com/BryanLunduke/LCOS](https://github.com/BryanLund
 
 ## Status
 
-**M1 in tree.** Connect (TLS) to a host:port as nick. Status shows the motd. Disconnect. Join is M2.
+**M2 in tree.** Connect, join one channel, talk, nick list. Several channels at once is M4.
 
 | Doc | What |
 |---|---|
