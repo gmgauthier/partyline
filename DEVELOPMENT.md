@@ -9,7 +9,7 @@ Repos: https://gitea.scriptorium/gmgauthier/partyline (origin), https://github.c
 
 ## Status (2026-09-12)
 
-**M3 in tree.** Server list in `~/.config/partyline/partyline.ini`. File → Servers…. Seed Libera / OFTC. Last nick and last server remembered. Connect uses the selected tree server.
+**M4 in tree.** Several channels on one server. Tree switches buffers; the others stay joined. `/part` leaves the current (or named) channel.
 
 ## 1. Locked decisions
 
@@ -112,8 +112,8 @@ v1 is M0 through M6. Do not open M7+ until this set has been lived with.
 | **M0 — Window** | Menus, toolbar, paned tree/buffer/nicks, About, CSS. Matches the ASCII mock. No socket. **Done.** |
 | **M1 — One server** | TLS connect to a typed host:port as nick. Status shows motd / errors. Disconnect. **Done.** |
 | **M2 — One channel** | `/join` or Join…. PRIVMSG in and out. Nick list from `353`. **Done.** |
-| **M3 — Server list** | Ini + Servers… dialog. Seed Libera / OFTC. Last nick remembered. **In tree.** |
-| **M4 — Several channels** | Two channels on one server; tree switches buffers; the other stays joined. |
+| **M3 — Server list** | Ini + Servers… dialog. Seed Libera / OFTC. Last nick remembered. **Done.** |
+| **M4 — Several channels** | Two channels on one server; tree switches buffers; the other stays joined. **In tree.** |
 | **M5 — Polish** | Keys, status `tls` / lag / usercount, `/msg` `/quote` `/nick`. **Chat pane palettes** (body background/text — mIRC-ish black/white/navy/olive). Not control-code colors as a career. |
 | **M6 — Package** | `debian/`, `scripts/release.sh` → `.deb`, tarball, AppImage. Tag `v0.1.0`. |
 

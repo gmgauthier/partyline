@@ -10,7 +10,7 @@ LCOS itself: [https://github.com/BryanLunduke/LCOS](https://github.com/BryanLund
 
 ## Status
 
-**M3 in tree.** Server list (ini + Servers…). Connect to the selected server. Join one channel. Several channels at once is M4.
+**M4 in tree.** Several channels on one server; the tree switches buffers. Polish is M5.
 
 | Doc | What |
 |---|---|

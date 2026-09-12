@@ -244,7 +244,6 @@ void MainWindow::build_body()
   fill_tree_idle();
 
   status_buf_ = Gtk::TextBuffer::create();
-  channel_buf_ = Gtk::TextBuffer::create();
   status_buf_->set_text(
       "Not connected.\n\n"
       "Select a server in the tree, then Connect.\n"
@@ -338,11 +337,13 @@ void MainWindow::fill_tree_connected()
     status[col_tree_name_] = "Status";
     status[col_tree_kind_] = 1;
     status[col_server_id_] = s.id;
-    if (s.id == connected_server_id_.raw() && !channel_name_.empty()) {
-      auto ch = *tree_store_->append(row.children());
-      ch[col_tree_name_] = channel_name_;
-      ch[col_tree_kind_] = 2;
-      ch[col_server_id_] = s.id;
+    if (s.id == connected_server_id_.raw()) {
+      for (const auto& ch : channels_) {
+        auto crow = *tree_store_->append(row.children());
+        crow[col_tree_name_] = ch.name;
+        crow[col_tree_kind_] = 2;
+        crow[col_server_id_] = s.id;
+      }
     }
   }
   tree_view_.expand_all();
@@ -371,18 +372,20 @@ const Server* MainWindow::selected_server()
   return settings_.find_id(id.raw());
 }
 
-void MainWindow::select_tree(int kind, const Glib::ustring& server_id)
+void MainWindow::select_tree(int kind, const Glib::ustring& server_id,
+                             const Glib::ustring& channel)
 {
   suppress_tree_ = true;
-  tree_store_->foreach_iter([this, kind, server_id](const Gtk::TreeModel::iterator& it) {
-    if ((*it)[col_tree_kind_] == kind && (*it)[col_server_id_] == server_id) {
-      const Gtk::TreeModel::Path path(it);
-      tree_current_path_ = path;
-      tree_view_.scroll_to_row(path);
-      tree_view_.queue_draw();
-      return true;
-    }
-    return false;
+  tree_store_->foreach_iter([this, kind, server_id, channel](const Gtk::TreeModel::iterator& it) {
+    if ((*it)[col_tree_kind_] != kind || (*it)[col_server_id_] != server_id)
+      return false;
+    if (kind == 2 && !same_chan((*it)[col_tree_name_], channel))
+      return false;
+    const Gtk::TreeModel::Path path(it);
+    tree_current_path_ = path;
+    tree_view_.scroll_to_row(path);
+    tree_view_.queue_draw();
+    return true;
   });
   suppress_tree_ = false;
 }
@@ -400,10 +403,13 @@ void MainWindow::append_status(const Glib::ustring& text)
     scroll_end(buffer_);
 }
 
-void MainWindow::append_channel(const Glib::ustring& text)
+void MainWindow::append_channel(const Glib::ustring& channel, const Glib::ustring& text)
 {
-  channel_buf_->insert(channel_buf_->end(), text + "\n");
-  if (pane_ == Pane::Channel)
+  Chan* ch = find_chan(channel);
+  if (!ch)
+    return;
+  ch->buf->insert(ch->buf->end(), text + "\n");
+  if (pane_ == Pane::Channel && same_chan(current_channel_, channel))
     scroll_end(buffer_);
 }
 
@@ -414,10 +420,17 @@ void MainWindow::show_pane(Pane pane)
     buffer_.set_buffer(status_buf_);
     input_target_.set_text("[Status]");
     scroll_end(buffer_);
+    nick_store_->clear();
   } else {
-    buffer_.set_buffer(channel_buf_);
-    input_target_.set_text(channel_name_.empty() ? "[Channel]" : channel_name_);
+    Chan* ch = find_chan(current_channel_);
+    if (!ch) {
+      show_pane(Pane::Status);
+      return;
+    }
+    buffer_.set_buffer(ch->buf);
+    input_target_.set_text(ch->name);
     scroll_end(buffer_);
+    refresh_nicks();
   }
 }
 
@@ -426,7 +439,7 @@ void MainWindow::show_not_yet(const Glib::ustring& feature)
   Gtk::MessageDialog dlg(*this, feature + " is later.", false, Gtk::MESSAGE_INFO,
                          Gtk::BUTTONS_OK, true);
   dlg.set_title("Partyline");
-  dlg.set_secondary_text("The server list is M3. Several channels at once is M4.");
+  dlg.set_secondary_text("Polish (keys, palettes, /nick) is M5.");
   dlg.run();
 }
 
@@ -439,7 +452,7 @@ void MainWindow::set_connected_ui(bool on)
   btn_send_.set_sensitive(on && registered_);
   if (!on) {
     registered_ = false;
-    reset_channel();
+    reset_channels();
     fill_tree_idle();
     show_pane(Pane::Status);
     set_title("Partyline");
@@ -447,25 +460,48 @@ void MainWindow::set_connected_ui(bool on)
   }
 }
 
-void MainWindow::reset_channel()
+MainWindow::Chan* MainWindow::find_chan(const Glib::ustring& name)
 {
-  channel_name_.clear();
-  nicks_.clear();
-  nick_store_->clear();
-  channel_buf_->set_text("");
+  for (auto& ch : channels_) {
+    if (same_chan(ch.name, name))
+      return &ch;
+  }
+  return nullptr;
 }
 
-void MainWindow::ensure_channel_row()
+const MainWindow::Chan* MainWindow::find_chan(const Glib::ustring& name) const
 {
+  for (const auto& ch : channels_) {
+    if (same_chan(ch.name, name))
+      return &ch;
+  }
+  return nullptr;
+}
+
+void MainWindow::reset_channels()
+{
+  channels_.clear();
+  current_channel_.clear();
+  nick_store_->clear();
+}
+
+void MainWindow::show_channel(const Glib::ustring& channel)
+{
+  if (!find_chan(channel))
+    return;
+  current_channel_ = find_chan(channel)->name;
   fill_tree_connected();
-  select_tree(2, connected_server_id_);
+  select_tree(2, connected_server_id_, current_channel_);
   show_pane(Pane::Channel);
 }
 
 void MainWindow::refresh_nicks()
 {
   nick_store_->clear();
-  std::vector<Glib::ustring> sorted = nicks_;
+  Chan* ch = find_chan(current_channel_);
+  if (!ch || pane_ != Pane::Channel)
+    return;
+  std::vector<Glib::ustring> sorted = ch->nicks;
   std::sort(sorted.begin(), sorted.end(), [](const Glib::ustring& a, const Glib::ustring& b) {
     return g_ascii_strcasecmp(a.c_str(), b.c_str()) < 0;
   });
@@ -475,22 +511,39 @@ void MainWindow::refresh_nicks()
   }
 }
 
-void MainWindow::add_nick(const Glib::ustring& nick)
+void MainWindow::add_nick(const Glib::ustring& channel, const Glib::ustring& nick)
 {
-  for (const auto& n : nicks_) {
+  Chan* ch = find_chan(channel);
+  if (!ch)
+    return;
+  for (const auto& n : ch->nicks) {
     if (nick_eq(n, nick))
       return;
   }
-  nicks_.push_back(nick);
-  refresh_nicks();
+  ch->nicks.push_back(nick);
+  if (same_chan(current_channel_, channel))
+    refresh_nicks();
 }
 
-void MainWindow::remove_nick(const Glib::ustring& nick)
+void MainWindow::remove_nick(const Glib::ustring& channel, const Glib::ustring& nick)
 {
-  nicks_.erase(std::remove_if(nicks_.begin(), nicks_.end(),
-                              [&](const Glib::ustring& n) { return nick_eq(n, nick); }),
-               nicks_.end());
-  refresh_nicks();
+  Chan* ch = find_chan(channel);
+  if (!ch)
+    return;
+  ch->nicks.erase(std::remove_if(ch->nicks.begin(), ch->nicks.end(),
+                                 [&](const Glib::ustring& n) { return nick_eq(n, nick); }),
+                  ch->nicks.end());
+  if (same_chan(current_channel_, channel))
+    refresh_nicks();
+}
+
+void MainWindow::drop_channel(const Glib::ustring& channel)
+{
+  channels_.erase(std::remove_if(channels_.begin(), channels_.end(),
+                                 [&](const Chan& c) { return same_chan(c.name, channel); }),
+                  channels_.end());
+  if (same_chan(current_channel_, channel))
+    current_channel_.clear();
 }
 
 Glib::ustring MainWindow::normalize_channel(Glib::ustring c) const
@@ -516,9 +569,9 @@ void MainWindow::do_join(const Glib::ustring& channel)
 {
   if (!session_ || !registered_ || channel.empty())
     return;
-  if (!channel_name_.empty() && !same_chan(channel_name_, channel)) {
-    session_->part(channel_name_.raw());
-    reset_channel();
+  if (find_chan(channel)) {
+    show_channel(channel);
+    return;
   }
   session_->join(channel.raw());
 }
@@ -536,8 +589,11 @@ void MainWindow::handle_command(const Glib::ustring& line)
   if (low == "join")
     do_join(normalize_channel(rest));
   else if (low == "part") {
-    if (!channel_name_.empty() && session_)
-      session_->part(channel_name_.raw());
+    Glib::ustring ch = normalize_channel(rest);
+    if (ch.empty())
+      ch = current_channel_;
+    if (!ch.empty() && session_)
+      session_->part(ch.raw());
   } else if (low == "quit")
     on_disconnect();
   else if (low == "quote") {
@@ -592,7 +648,7 @@ void MainWindow::on_connect()
   settings_.save();
 
   registered_ = false;
-  reset_channel();
+  reset_channels();
   status_buf_->set_text("");
   show_pane(Pane::Status);
   fill_tree_connected();
@@ -643,13 +699,13 @@ void MainWindow::on_send()
     handle_command(text);
     return;
   }
-  if (pane_ != Pane::Channel || channel_name_.empty()) {
+  if (pane_ != Pane::Channel || current_channel_.empty()) {
     append_status("* not on a channel — /join #name or Join…");
     show_pane(Pane::Status);
     return;
   }
-  session_->privmsg(channel_name_.raw(), text.raw());
-  append_channel("<" + connected_nick_ + "> " + text);
+  session_->privmsg(current_channel_.raw(), text.raw());
+  append_channel(current_channel_, "<" + connected_nick_ + "> " + text);
 }
 
 void MainWindow::on_quit()
@@ -687,8 +743,8 @@ void MainWindow::on_session_finished(const Glib::ustring& reason)
 void MainWindow::on_session_privmsg(const Glib::ustring& target, const Glib::ustring& nick,
                                     const Glib::ustring& text)
 {
-  if (!channel_name_.empty() && same_chan(target, channel_name_))
-    append_channel("<" + nick + "> " + text);
+  if (find_chan(target))
+    append_channel(target, "<" + nick + "> " + text);
   else if (nick_eq(target, connected_nick_))
     append_status("* " + nick + ": " + text);
 }
@@ -696,63 +752,75 @@ void MainWindow::on_session_privmsg(const Glib::ustring& target, const Glib::ust
 void MainWindow::on_session_join(const Glib::ustring& channel, const Glib::ustring& nick, bool me)
 {
   if (me) {
-    channel_name_ = channel;
-    nicks_.clear();
-    channel_buf_->set_text("");
-    append_channel("* Now talking in " + channel);
-    ensure_channel_row();
+    if (!find_chan(channel)) {
+      Chan ch;
+      ch.name = channel;
+      ch.buf = Gtk::TextBuffer::create();
+      channels_.push_back(std::move(ch));
+    }
+    append_channel(channel, "* Now talking in " + channel);
+    show_channel(channel);
     set_status(connected_nick_ + " @ " + connected_host_ + "  " + channel);
     return;
   }
-  if (same_chan(channel, channel_name_)) {
-    add_nick(nick);
-    append_channel("* " + nick + " has joined " + channel);
+  if (find_chan(channel)) {
+    add_nick(channel, nick);
+    append_channel(channel, "* " + nick + " has joined " + channel);
   }
 }
 
 void MainWindow::on_session_part(const Glib::ustring& channel, const Glib::ustring& nick, bool me)
 {
-  if (me && same_chan(channel, channel_name_)) {
-    append_channel("* You have left " + channel);
-    reset_channel();
+  if (me) {
+    append_channel(channel, "* You have left " + channel);
+    const bool was_current = same_chan(current_channel_, channel);
+    drop_channel(channel);
     fill_tree_connected();
-    select_tree(1, connected_server_id_);
-    show_pane(Pane::Status);
-    set_status(connected_nick_ + " @ " + connected_host_ + "  tls");
+    if (was_current && !channels_.empty())
+      show_channel(channels_.back().name);
+    else if (was_current) {
+      select_tree(1, connected_server_id_);
+      show_pane(Pane::Status);
+      set_status(connected_nick_ + " @ " + connected_host_ + "  tls");
+    } else if (!current_channel_.empty())
+      select_tree(2, connected_server_id_, current_channel_);
     return;
   }
-  if (same_chan(channel, channel_name_)) {
-    remove_nick(nick);
-    append_channel("* " + nick + " has left " + channel);
+  if (find_chan(channel)) {
+    remove_nick(channel, nick);
+    append_channel(channel, "* " + nick + " has left " + channel);
   }
 }
 
 void MainWindow::on_session_quit(const Glib::ustring& nick)
 {
-  if (channel_name_.empty())
-    return;
-  bool present = false;
-  for (const auto& n : nicks_) {
-    if (nick_eq(n, nick)) {
-      present = true;
-      break;
+  for (auto& ch : channels_) {
+    bool present = false;
+    for (const auto& n : ch.nicks) {
+      if (nick_eq(n, nick)) {
+        present = true;
+        break;
+      }
     }
+    if (!present)
+      continue;
+    remove_nick(ch.name, nick);
+    append_channel(ch.name, "* " + nick + " has quit");
   }
-  if (!present)
-    return;
-  remove_nick(nick);
-  append_channel("* " + nick + " has quit");
 }
 
 void MainWindow::on_session_names(const Glib::ustring& channel,
                                  const std::vector<Glib::ustring>& nicks)
 {
-  if (!same_chan(channel, channel_name_))
+  Chan* ch = find_chan(channel);
+  if (!ch)
     return;
-  nicks_ = nicks;
-  refresh_nicks();
-  set_status(connected_nick_ + " @ " + connected_host_ + "  " + channel_name_ + "  " +
-             std::to_string(nicks_.size()) + " users");
+  ch->nicks = nicks;
+  if (same_chan(current_channel_, channel)) {
+    refresh_nicks();
+    set_status(connected_nick_ + " @ " + connected_host_ + "  " + ch->name + "  " +
+               std::to_string(ch->nicks.size()) + " users");
+  }
 }
 
 void MainWindow::style_tree_column()
@@ -812,10 +880,15 @@ void MainWindow::apply_tree_path(const Gtk::TreeModel::Path& path)
   if (!it)
     return;
   const int kind = (*it)[col_tree_kind_];
-  if (kind == 2 && !channel_name_.empty())
-    show_pane(Pane::Channel);
-  else
-    show_pane(Pane::Status);
+  if (kind == 2) {
+    const Glib::ustring name = (*it)[col_tree_name_];
+    if (find_chan(name)) {
+      current_channel_ = find_chan(name)->name;
+      show_pane(Pane::Channel);
+      return;
+    }
+  }
+  show_pane(Pane::Status);
 }
 
 void MainWindow::on_about()

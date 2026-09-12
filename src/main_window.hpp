@@ -28,18 +28,19 @@ class MainWindow : public Gtk::Window {
   void fill_tree_connected();
   void persist();
   const Server* selected_server();
-  void select_tree(int kind, const Glib::ustring& server_id);
+  void select_tree(int kind, const Glib::ustring& server_id, const Glib::ustring& channel = {});
   void set_status(const Glib::ustring& text);
   void append_status(const Glib::ustring& text);
-  void append_channel(const Glib::ustring& text);
+  void append_channel(const Glib::ustring& channel, const Glib::ustring& text);
   void show_pane(Pane pane);
   void show_not_yet(const Glib::ustring& feature);
   void set_connected_ui(bool on);
-  void reset_channel();
-  void ensure_channel_row();
+  void reset_channels();
+  void show_channel(const Glib::ustring& channel);
   void refresh_nicks();
-  void add_nick(const Glib::ustring& nick);
-  void remove_nick(const Glib::ustring& nick);
+  void add_nick(const Glib::ustring& channel, const Glib::ustring& nick);
+  void remove_nick(const Glib::ustring& channel, const Glib::ustring& nick);
+  void drop_channel(const Glib::ustring& channel);
   Glib::ustring normalize_channel(Glib::ustring c) const;
   bool same_chan(const Glib::ustring& a, const Glib::ustring& b) const;
   void do_join(const Glib::ustring& channel);
@@ -112,15 +113,22 @@ class MainWindow : public Gtk::Window {
   Gtk::TreeModelColumnRecord nick_cols_;
 
   Glib::RefPtr<Gtk::TextBuffer> status_buf_;
-  Glib::RefPtr<Gtk::TextBuffer> channel_buf_;
+
+  struct Chan {
+    Glib::ustring name;
+    Glib::RefPtr<Gtk::TextBuffer> buf;
+    std::vector<Glib::ustring> nicks;
+  };
+  std::vector<Chan> channels_;
+  Chan* find_chan(const Glib::ustring& name);
+  const Chan* find_chan(const Glib::ustring& name) const;
 
   Settings settings_;
   std::unique_ptr<IrcSession> session_;
   Glib::ustring connected_host_;
   Glib::ustring connected_nick_;
   Glib::ustring connected_server_id_;
-  Glib::ustring channel_name_;
-  std::vector<Glib::ustring> nicks_;
+  Glib::ustring current_channel_;
   bool registered_ = false;
   bool suppress_tree_ = false;
   Pane pane_ = Pane::Status;
