@@ -22,6 +22,51 @@ Gtk::Separator* toolbar_sep()
   return sep;
 }
 
+void paint_nav_cell(Gtk::CellRenderer* cell, const Gtk::TreeModel::Path& path,
+                    const Gtk::TreeModel::Path& current, const Gtk::TreeModel::Path& hover)
+{
+  if (!cell)
+    return;
+  const bool on = (current.size() > 0 && path.size() > 0 && path == current) ||
+                  (hover.size() > 0 && path.size() > 0 && path == hover);
+  if (on) {
+    cell->property_cell_background() = "#C4C4BC";
+    cell->property_cell_background_set() = true;
+  } else {
+    cell->property_cell_background_set() = false;
+  }
+}
+
+bool nav_motion(Gtk::TreeView& view, Gtk::TreeModel::Path& hover, GdkEventMotion* event)
+{
+  Gtk::TreeModel::Path path;
+  Gtk::TreeViewColumn* col = nullptr;
+  int cx = 0, cy = 0, bx = 0, by = 0;
+  view.convert_widget_to_bin_window_coords(static_cast<int>(event->x),
+                                           static_cast<int>(event->y), bx, by);
+  if (view.get_path_at_pos(bx, by, path, col, cx, cy) && path.size() > 0) {
+    if (hover.size() == 0 || hover != path) {
+      hover = path;
+      view.queue_draw();
+    }
+  } else if (hover.size() > 0) {
+    hover.clear();
+    view.queue_draw();
+  }
+  return false;
+}
+
+bool nav_leave(Gtk::TreeView& view, Gtk::TreeModel::Path& hover, GdkEventCrossing* event)
+{
+  if (event && event->detail == GDK_NOTIFY_INFERIOR)
+    return false;
+  if (hover.size() > 0) {
+    hover.clear();
+    view.queue_draw();
+  }
+  return false;
+}
+
 void scroll_end(Gtk::TextView& view)
 {
   auto buf = view.get_buffer();
@@ -175,8 +220,24 @@ void MainWindow::build_body()
   tree_view_.set_model(tree_store_);
   tree_view_.append_column("Servers", col_tree_name_);
   tree_view_.set_headers_visible(false);
+  tree_view_.get_selection()->set_mode(Gtk::SELECTION_NONE);
   tree_view_.get_style_context()->add_class("partyline-tree");
-  tree_view_.signal_cursor_changed().connect(sigc::mem_fun(*this, &MainWindow::on_tree_cursor));
+  style_tree_column();
+  if (auto* col = tree_view_.get_column(0)) {
+    const auto cells = col->get_cells();
+    if (!cells.empty()) {
+      if (auto* text = dynamic_cast<Gtk::CellRendererText*>(cells[0]))
+        col->set_cell_data_func(*text, sigc::mem_fun(*this, &MainWindow::on_tree_cell_data));
+    }
+  }
+  tree_view_.add_events(Gdk::POINTER_MOTION_MASK | Gdk::LEAVE_NOTIFY_MASK |
+                        Gdk::BUTTON_PRESS_MASK);
+  tree_view_.signal_motion_notify_event().connect(
+      sigc::mem_fun(*this, &MainWindow::on_tree_motion), false);
+  tree_view_.signal_leave_notify_event().connect(
+      sigc::mem_fun(*this, &MainWindow::on_tree_leave), false);
+  tree_view_.signal_button_press_event().connect(
+      sigc::mem_fun(*this, &MainWindow::on_tree_button), false);
   tree_scroll_.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
   tree_scroll_.add(tree_view_);
   tree_scroll_.set_size_request(160, -1);
@@ -193,6 +254,10 @@ void MainWindow::build_body()
   buffer_.set_editable(false);
   buffer_.set_wrap_mode(Gtk::WRAP_WORD_CHAR);
   buffer_.set_cursor_visible(false);
+  buffer_.set_left_margin(10);
+  buffer_.set_right_margin(10);
+  buffer_.set_top_margin(8);
+  buffer_.set_bottom_margin(8);
   buffer_.get_style_context()->add_class("partyline-buffer");
   buffer_.set_buffer(status_buf_);
   buffer_scroll_.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
@@ -239,6 +304,7 @@ void MainWindow::build_body()
 void MainWindow::fill_tree_idle()
 {
   suppress_tree_ = true;
+  tree_hover_path_.clear();
   tree_store_->clear();
   for (const auto& s : settings_.servers) {
     auto row = *tree_store_->append();
@@ -261,6 +327,7 @@ void MainWindow::fill_tree_idle()
 void MainWindow::fill_tree_connected()
 {
   suppress_tree_ = true;
+  tree_hover_path_.clear();
   tree_store_->clear();
   for (const auto& s : settings_.servers) {
     auto row = *tree_store_->append();
@@ -295,10 +362,12 @@ void MainWindow::persist()
 
 const Server* MainWindow::selected_server()
 {
-  const auto sel = tree_view_.get_selection()->get_selected();
-  if (!sel)
+  if (tree_current_path_.size() == 0)
     return nullptr;
-  const Glib::ustring id = (*sel)[col_server_id_];
+  auto it = tree_store_->get_iter(tree_current_path_);
+  if (!it)
+    return nullptr;
+  const Glib::ustring id = (*it)[col_server_id_];
   return settings_.find_id(id.raw());
 }
 
@@ -308,8 +377,9 @@ void MainWindow::select_tree(int kind, const Glib::ustring& server_id)
   tree_store_->foreach_iter([this, kind, server_id](const Gtk::TreeModel::iterator& it) {
     if ((*it)[col_tree_kind_] == kind && (*it)[col_server_id_] == server_id) {
       const Gtk::TreeModel::Path path(it);
-      tree_view_.get_selection()->select(it);
+      tree_current_path_ = path;
       tree_view_.scroll_to_row(path);
+      tree_view_.queue_draw();
       return true;
     }
     return false;
@@ -685,14 +755,63 @@ void MainWindow::on_session_names(const Glib::ustring& channel,
              std::to_string(nicks_.size()) + " users");
 }
 
-void MainWindow::on_tree_cursor()
+void MainWindow::style_tree_column()
 {
+  if (auto* col = tree_view_.get_column(0)) {
+    col->set_expand(true);
+    const auto cells = col->get_cells();
+    if (!cells.empty()) {
+      if (auto* text = dynamic_cast<Gtk::CellRendererText*>(cells[0])) {
+        text->property_ellipsize() = Pango::ELLIPSIZE_END;
+        text->property_xpad() = 6;
+      }
+    }
+  }
+}
+
+void MainWindow::on_tree_cell_data(Gtk::CellRenderer* cell,
+                                   const Gtk::TreeModel::const_iterator& it)
+{
+  if (!it)
+    return;
+  paint_nav_cell(cell, tree_store_->get_path(it), tree_current_path_, tree_hover_path_);
+}
+
+bool MainWindow::on_tree_motion(GdkEventMotion* event)
+{
+  return nav_motion(tree_view_, tree_hover_path_, event);
+}
+
+bool MainWindow::on_tree_leave(GdkEventCrossing* event)
+{
+  return nav_leave(tree_view_, tree_hover_path_, event);
+}
+
+bool MainWindow::on_tree_button(GdkEventButton* event)
+{
+  if (!event || event->button != 1 || event->type != GDK_BUTTON_PRESS)
+    return false;
+  Gtk::TreeModel::Path path;
+  Gtk::TreeViewColumn* col = nullptr;
+  int cx = 0, cy = 0, bx = 0, by = 0;
+  tree_view_.convert_widget_to_bin_window_coords(static_cast<int>(event->x),
+                                                 static_cast<int>(event->y), bx, by);
+  if (!tree_view_.get_path_at_pos(bx, by, path, col, cx, cy) || path.size() == 0)
+    return false;
+  apply_tree_path(path);
+  return false;
+}
+
+void MainWindow::apply_tree_path(const Gtk::TreeModel::Path& path)
+{
+  tree_current_path_ = path;
+  tree_view_.queue_draw();
   if (suppress_tree_)
     return;
-  const auto sel = tree_view_.get_selection()->get_selected();
-  if (!sel)
+  auto it = tree_store_->get_iter(path);
+  if (!it)
     return;
-  const int kind = (*sel)[col_tree_kind_];
+  const int kind = (*it)[col_tree_kind_];
   if (kind == 2 && !channel_name_.empty())
     show_pane(Pane::Channel);
   else

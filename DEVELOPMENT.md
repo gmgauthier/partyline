@@ -114,10 +114,10 @@ v1 is M0 through M6. Do not open M7+ until this set has been lived with.
 | **M2 — One channel** | `/join` or Join…. PRIVMSG in and out. Nick list from `353`. **Done.** |
 | **M3 — Server list** | Ini + Servers… dialog. Seed Libera / OFTC. Last nick remembered. **In tree.** |
 | **M4 — Several channels** | Two channels on one server; tree switches buffers; the other stays joined. |
-| **M5 — Polish** | Keys, status `tls` / lag / usercount, `/msg` `/quote` `/nick`. |
+| **M5 — Polish** | Keys, status `tls` / lag / usercount, `/msg` `/quote` `/nick`. **Chat pane palettes** (body background/text — mIRC-ish black/white/navy/olive). Not control-code colors as a career. |
 | **M6 — Package** | `debian/`, `scripts/release.sh` → `.deb`, tarball, AppImage. Tag `v0.1.0`. |
 
-After v1: SASL, query windows, channel logs, highlight, notify, DCC, ident, auto-join, `/whois`.
+After v1: SASL, query windows, channel logs, highlight, notify, DCC, ident, auto-join, `/whois`. Chat palettes ship in **M5** if they fit; extra skins wait.
 
 ## Traps
 

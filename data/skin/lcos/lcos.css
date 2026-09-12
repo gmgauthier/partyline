@@ -12,6 +12,10 @@ window.partyline-window {
   color: #000000;
 }
 
+treeview.partyline-tree {
+  -GtkTreeView-horizontal-separator: 0;
+}
+
 .partyline-buffer,
 .partyline-buffer text {
   background-color: #FFFFFF;

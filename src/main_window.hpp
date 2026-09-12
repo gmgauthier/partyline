@@ -60,7 +60,12 @@ class MainWindow : public Gtk::Window {
   void on_session_part(const Glib::ustring& channel, const Glib::ustring& nick, bool me);
   void on_session_quit(const Glib::ustring& nick);
   void on_session_names(const Glib::ustring& channel, const std::vector<Glib::ustring>& nicks);
-  void on_tree_cursor();
+  void style_tree_column();
+  void on_tree_cell_data(Gtk::CellRenderer* cell, const Gtk::TreeModel::const_iterator& it);
+  bool on_tree_motion(GdkEventMotion* event);
+  bool on_tree_leave(GdkEventCrossing* event);
+  bool on_tree_button(GdkEventButton* event);
+  void apply_tree_path(const Gtk::TreeModel::Path& path);
   void on_toggle_tree();
   void on_toggle_nicks();
   void on_toggle_status();
@@ -119,6 +124,8 @@ class MainWindow : public Gtk::Window {
   bool registered_ = false;
   bool suppress_tree_ = false;
   Pane pane_ = Pane::Status;
+  Gtk::TreeModel::Path tree_current_path_;
+  Gtk::TreeModel::Path tree_hover_path_;
 };
 
 }  // namespace partyline
