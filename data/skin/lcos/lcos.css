@@ -1,0 +1,30 @@
+/* Partyline lcos skin — GTK3 CSS.
+ * Decorations stay with Clearlooks / Phenix. We only tint the client.
+ */
+
+window.partyline-window {
+  background-color: #E6E6E1;
+}
+
+.partyline-tree,
+.partyline-nicks {
+  background-color: #FFFFFF;
+  color: #000000;
+}
+
+.partyline-buffer,
+.partyline-buffer text {
+  background-color: #FFFFFF;
+  color: #1A1A1A;
+  font-family: monospace;
+}
+
+.partyline-buffer text selection,
+textview.partyline-buffer text selection {
+  background-color: #3D6AA8;
+  color: #FFFFFF;
+}
+
+statusbar {
+  background-color: #D4D0C8;
+}

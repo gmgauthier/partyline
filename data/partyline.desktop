@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Partyline
+Comment=An mIRC-shaped IRC client for The Lunduke Computer Operating System
+Exec=partyline
+Icon=partyline
+Terminal=false
+Hidden=false
+Categories=GTK;Network;IRCClient;
+StartupWMClass=partyline
+StartupNotify=true
