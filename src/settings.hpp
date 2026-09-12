@@ -22,7 +22,7 @@ struct Settings {
   std::string last_server;
   int window_w = 900;
   int window_h = 600;
-  int palette = 0;  // 0 white, 1 black, 2 navy, 3 olive
+  int palette = 0;  // 0 white, 1 eggshell, 2 black, 3 navy, 4 olive
   std::vector<Server> servers;
 
   void load();

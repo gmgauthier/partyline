@@ -145,7 +145,7 @@ void Settings::load()
     window_w = 400;
   if (window_h < 300)
     window_h = 300;
-  if (palette < 0 || palette > 3)
+  if (palette < 0 || palette > 4)
     palette = 0;
 
   servers.clear();

@@ -9,7 +9,7 @@ Repos: https://gitea.scriptorium/gmgauthier/partyline (origin), https://github.c
 
 ## Status (2026-09-12)
 
-**M5 in tree.** Keys (Tab nick complete, Up/Down history, PgUp/PgDn). Status `tls` + lag + usercount. `/msg` `/quote` `/nick`. View → Palette (white / black / navy / olive).
+**M5 in tree.** Keys (Tab nick complete, Up/Down history, PgUp/PgDn). Status `tls` + lag + usercount. `/msg` `/quote` `/nick`. View → Palette (white / eggshell / black / navy / olive). Eggshell is YOLO-dex card body `#F7F5EF` / `#1A1A1A`.
 
 ## 1. Locked decisions
 

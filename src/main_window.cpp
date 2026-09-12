@@ -114,7 +114,7 @@ MainWindow::MainWindow()
 
   add(root_);
   show_all();
-  if (settings_.palette >= 0 && settings_.palette < 4 && pal_item_[settings_.palette])
+  if (settings_.palette >= 0 && settings_.palette < 5 && pal_item_[settings_.palette])
     pal_item_[settings_.palette]->set_active(true);
   apply_palette();
   signal_hide().connect(sigc::mem_fun(*this, &MainWindow::persist));
@@ -191,8 +191,8 @@ void MainWindow::build_menu()
   view->append(*Gtk::manage(new Gtk::SeparatorMenuItem()));
   auto* pal_menu = Gtk::manage(new Gtk::Menu());
   Gtk::RadioButtonGroup pal_grp;
-  const char* pal_labels[] = {"_White", "_Black", "_Navy", "_Olive"};
-  for (int i = 0; i < 4; ++i) {
+  const char* pal_labels[] = {"_White", "_Eggshell", "_Black", "_Navy", "_Olive"};
+  for (int i = 0; i < 5; ++i) {
     pal_item_[i] = Gtk::manage(new Gtk::RadioMenuItem(pal_grp, pal_labels[i], true));
     pal_item_[i]->signal_toggled().connect([this, i]() { on_palette(i); });
     pal_menu->append(*pal_item_[i]);
@@ -1015,10 +1015,10 @@ void MainWindow::on_session_lag()
 
 void MainWindow::apply_palette()
 {
-  static const char* bg[] = {"#FFFFFF", "#000000", "#0B1D38", "#3D4A1A"};
-  static const char* fg[] = {"#1A1A1A", "#C0C0C0", "#E8F2FF", "#F7F5EF"};
+  static const char* bg[] = {"#FFFFFF", "#F7F5EF", "#000000", "#0B1D38", "#3D4A1A"};
+  static const char* fg[] = {"#1A1A1A", "#1A1A1A", "#C0C0C0", "#E8F2FF", "#F7F5EF"};
   int i = settings_.palette;
-  if (i < 0 || i > 3)
+  if (i < 0 || i > 4)
     i = 0;
   const std::string css =
       Glib::ustring::compose(
@@ -1040,7 +1040,7 @@ void MainWindow::apply_palette()
 
 void MainWindow::on_palette(int id)
 {
-  if (id < 0 || id > 3 || !pal_item_[id] || !pal_item_[id]->get_active())
+  if (id < 0 || id > 4 || !pal_item_[id] || !pal_item_[id]->get_active())
     return;
   settings_.palette = id;
   apply_palette();

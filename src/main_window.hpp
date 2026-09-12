@@ -97,7 +97,7 @@ class MainWindow : public Gtk::Window {
   Gtk::CheckMenuItem* view_tree_item_ = nullptr;
   Gtk::CheckMenuItem* view_nicks_item_ = nullptr;
   Gtk::CheckMenuItem* view_status_item_ = nullptr;
-  Gtk::RadioMenuItem* pal_item_[4] = {nullptr, nullptr, nullptr, nullptr};
+  Gtk::RadioMenuItem* pal_item_[5] = {};
   Glib::RefPtr<Gtk::AccelGroup> accel_;
   Glib::RefPtr<Gtk::CssProvider> palette_css_;
   sigc::connection lag_conn_;
