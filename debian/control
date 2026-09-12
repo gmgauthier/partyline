@@ -1,0 +1,26 @@
+Source: partyline
+Section: net
+Priority: optional
+Maintainer: Greg Gauthier <gmgauthier@protonmail.com>
+Build-Depends:
+ debhelper-compat (= 13),
+ meson (>= 0.56),
+ ninja-build,
+ pkg-config,
+ g++,
+ libgtkmm-3.0-dev
+Standards-Version: 4.7.0
+Homepage: https://gitea.scriptorium/gmgauthier/partyline
+Vcs-Git: https://gitea.scriptorium/gmgauthier/partyline.git
+Vcs-Browser: https://gitea.scriptorium/gmgauthier/partyline
+Rules-Requires-Root: no
+
+Package: partyline
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ glib-networking
+Description: mIRC-shaped IRC client for The Lunduke Computer Operating System
+ Partyline is a single-window gtkmm-3 IRC client whose chrome is mIRC
+ 5.x / 6. Local server list, TLS, no bouncer, no daemon.

@@ -1,0 +1,6 @@
+partyline (0.1.0-1) unstable; urgency=medium
+
+  * Initial package. gtkmm-3 mIRC-shaped IRC client for LCOS
+    (milestones M0–M6).
+
+ -- Greg Gauthier <gmgauthier@protonmail.com>  Sat, 12 Sep 2026 15:51:00 +0100
