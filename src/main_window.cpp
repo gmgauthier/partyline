@@ -27,13 +27,23 @@ void paint_nav_cell(Gtk::CellRenderer* cell, const Gtk::TreeModel::Path& path,
 {
   if (!cell)
     return;
-  const bool on = (current.size() > 0 && path.size() > 0 && path == current) ||
-                  (hover.size() > 0 && path.size() > 0 && path == hover);
-  if (on) {
-    cell->property_cell_background() = "#C4C4BC";
+  /* Paint both cell-background and CellRendererText background. Adwaita
+   * ignores the former when the view is unfocused (i3 / Debian). */
+  const bool is_cur = current.size() > 0 && path.size() > 0 && path == current;
+  const bool is_hov = hover.size() > 0 && path.size() > 0 && path == hover;
+  auto* text = dynamic_cast<Gtk::CellRendererText*>(cell);
+  if (is_cur || is_hov) {
+    const char* color = is_cur ? "#8AADC8" : "#C5D4E8";
+    cell->property_cell_background() = color;
     cell->property_cell_background_set() = true;
+    if (text) {
+      text->property_background() = color;
+      text->property_background_set() = true;
+    }
   } else {
     cell->property_cell_background_set() = false;
+    if (text)
+      text->property_background_set() = false;
   }
 }
 
@@ -247,9 +257,11 @@ void MainWindow::build_body()
   tree_view_.set_model(tree_store_);
   tree_view_.append_column("Servers", col_tree_name_);
   tree_view_.set_headers_visible(false);
+  tree_view_.set_enable_search(false);
+  tree_view_.set_can_focus(true);
   tree_view_.get_selection()->set_mode(Gtk::SELECTION_NONE);
   tree_view_.get_style_context()->add_class("partyline-tree");
-  style_tree_column();
+  style_nav_column(tree_view_);
   if (auto* col = tree_view_.get_column(0)) {
     const auto cells = col->get_cells();
     if (!cells.empty()) {
@@ -310,7 +322,26 @@ void MainWindow::build_body()
   nick_view_.set_model(nick_store_);
   nick_view_.append_column("Nicks", col_nick_);
   nick_view_.set_headers_visible(false);
+  nick_view_.set_enable_search(false);
+  nick_view_.set_can_focus(true);
+  nick_view_.get_selection()->set_mode(Gtk::SELECTION_NONE);
   nick_view_.get_style_context()->add_class("partyline-nicks");
+  style_nav_column(nick_view_);
+  if (auto* col = nick_view_.get_column(0)) {
+    const auto cells = col->get_cells();
+    if (!cells.empty()) {
+      if (auto* text = dynamic_cast<Gtk::CellRendererText*>(cells[0]))
+        col->set_cell_data_func(*text, sigc::mem_fun(*this, &MainWindow::on_nick_cell_data));
+    }
+  }
+  nick_view_.add_events(Gdk::POINTER_MOTION_MASK | Gdk::LEAVE_NOTIFY_MASK |
+                        Gdk::BUTTON_PRESS_MASK);
+  nick_view_.signal_motion_notify_event().connect(
+      sigc::mem_fun(*this, &MainWindow::on_nick_motion), false);
+  nick_view_.signal_leave_notify_event().connect(
+      sigc::mem_fun(*this, &MainWindow::on_nick_leave), false);
+  nick_view_.signal_button_press_event().connect(
+      sigc::mem_fun(*this, &MainWindow::on_nick_button), false);
   nick_scroll_.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
   nick_scroll_.add(nick_view_);
   nick_scroll_.set_size_request(140, -1);
@@ -532,6 +563,8 @@ void MainWindow::reset_channels()
 {
   channels_.clear();
   current_channel_.clear();
+  nick_hover_path_.clear();
+  nick_current_path_.clear();
   nick_store_->clear();
 }
 
@@ -547,6 +580,14 @@ void MainWindow::show_channel(const Glib::ustring& channel)
 
 void MainWindow::refresh_nicks()
 {
+  Glib::ustring kept;
+  if (nick_current_path_.size() > 0) {
+    auto it = nick_store_->get_iter(nick_current_path_);
+    if (it)
+      kept = (*it)[col_nick_];
+  }
+  nick_hover_path_.clear();
+  nick_current_path_.clear();
   nick_store_->clear();
   Chan* ch = find_chan(current_channel_);
   if (!ch || pane_ != Pane::Channel)
@@ -558,6 +599,8 @@ void MainWindow::refresh_nicks()
   for (const auto& n : sorted) {
     auto row = *nick_store_->append();
     row[col_nick_] = n;
+    if (!kept.empty() && nick_eq(n, kept))
+      nick_current_path_ = nick_store_->get_path(row);
   }
 }
 
@@ -902,9 +945,9 @@ void MainWindow::on_session_names(const Glib::ustring& channel,
   refresh_status_bar();
 }
 
-void MainWindow::style_tree_column()
+void MainWindow::style_nav_column(Gtk::TreeView& view)
 {
-  if (auto* col = tree_view_.get_column(0)) {
+  if (auto* col = view.get_column(0)) {
     col->set_expand(true);
     const auto cells = col->get_cells();
     if (!cells.empty()) {
@@ -946,6 +989,40 @@ bool MainWindow::on_tree_button(GdkEventButton* event)
   if (!tree_view_.get_path_at_pos(bx, by, path, col, cx, cy) || path.size() == 0)
     return false;
   apply_tree_path(path);
+  return false;
+}
+
+void MainWindow::on_nick_cell_data(Gtk::CellRenderer* cell,
+                                   const Gtk::TreeModel::const_iterator& it)
+{
+  if (!it)
+    return;
+  paint_nav_cell(cell, nick_store_->get_path(it), nick_current_path_, nick_hover_path_);
+}
+
+bool MainWindow::on_nick_motion(GdkEventMotion* event)
+{
+  return nav_motion(nick_view_, nick_hover_path_, event);
+}
+
+bool MainWindow::on_nick_leave(GdkEventCrossing* event)
+{
+  return nav_leave(nick_view_, nick_hover_path_, event);
+}
+
+bool MainWindow::on_nick_button(GdkEventButton* event)
+{
+  if (!event || event->button != 1 || event->type != GDK_BUTTON_PRESS)
+    return false;
+  Gtk::TreeModel::Path path;
+  Gtk::TreeViewColumn* col = nullptr;
+  int cx = 0, cy = 0, bx = 0, by = 0;
+  nick_view_.convert_widget_to_bin_window_coords(static_cast<int>(event->x),
+                                                 static_cast<int>(event->y), bx, by);
+  if (!nick_view_.get_path_at_pos(bx, by, path, col, cx, cy) || path.size() == 0)
+    return false;
+  nick_current_path_ = path;
+  nick_view_.queue_draw();
   return false;
 }
 

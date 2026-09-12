@@ -12,8 +12,17 @@ window.partyline-window {
   color: #000000;
 }
 
-treeview.partyline-tree {
+treeview.partyline-tree,
+treeview.partyline-nicks {
   -GtkTreeView-horizontal-separator: 0;
+}
+
+/* Adwaita hides unfocused :selected. We paint rows ourselves; keep text dark. */
+treeview.partyline-tree:selected,
+treeview.partyline-nicks:selected,
+treeview.partyline-tree:selected:focus,
+treeview.partyline-nicks:selected:focus {
+  color: #000000;
 }
 
 .partyline-buffer,
