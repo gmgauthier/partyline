@@ -5,6 +5,8 @@
 
 #include <glib.h>
 
+#include <chrono>
+
 namespace partyline {
 namespace {
 
@@ -489,12 +491,10 @@ void IrcSession::handle_line(const std::string& line)
 void IrcSession::thread_main()
 {
   std::string finish = "Disconnected.";
+  std::atomic<bool> timed_out{false};
   try {
     auto client = Gio::SocketClient::create();
     client->set_tls(tls_);
-    /* Connect/handshake only. Cleared on the socket after connect so idle
-     * reads do not die. Filtered ports (Undernet 6697) fail instead of hanging. */
-    client->set_timeout(20);
     if (tls_ && !tls_verify_) {
       const auto flags = static_cast<Gio::TlsCertificateFlags>(
           Gio::TLS_CERTIFICATE_VALIDATE_ALL & ~Gio::TLS_CERTIFICATE_BAD_IDENTITY);
@@ -508,7 +508,32 @@ void IrcSession::thread_main()
              false,
              {}});
 
-    auto conn = client->connect_to_host(host_, port_, cancellable_);
+    /* GIO's per-socket timeout tries every A record; a filtered port on a
+     * five-address round-robin hangs for minutes. Cancel the whole attempt. */
+    std::atomic<bool> connecting{true};
+    std::thread watchdog([this, &connecting, &timed_out]() {
+      for (int i = 0; i < 20 && connecting.load(); ++i) {
+        if (cancellable_ && cancellable_->is_cancelled())
+          return;
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+      }
+      if (connecting.load() && cancellable_) {
+        timed_out.store(true);
+        cancellable_->cancel();
+      }
+    });
+    Glib::RefPtr<Gio::SocketConnection> conn;
+    try {
+      conn = client->connect_to_host(host_, port_, cancellable_);
+    } catch (...) {
+      connecting.store(false);
+      if (watchdog.joinable())
+        watchdog.join();
+      throw;
+    }
+    connecting.store(false);
+    if (watchdog.joinable())
+      watchdog.join();
     {
       std::lock_guard<std::mutex> lock(out_mu_);
       sock_ = conn->get_socket();
@@ -535,7 +560,10 @@ void IrcSession::thread_main()
       }
     }
   } catch (const Glib::Error& e) {
-    if (!(cancellable_ && cancellable_->is_cancelled())) {
+    if (timed_out) {
+      finish = "Connection timed out after 20s. Check host, port, and TLS "
+               "(Undernet is 6667 with TLS off).";
+    } else if (!(cancellable_ && cancellable_->is_cancelled())) {
       finish = e.what();
       const std::string w = e.what();
       if (w.find("TLS certificate") != std::string::npos ||
