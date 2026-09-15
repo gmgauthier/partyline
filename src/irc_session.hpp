@@ -26,7 +26,10 @@ class IrcSession {
   void start(std::string host, guint16 port, bool tls, bool tls_verify, std::string nick,
              std::string realname);
   void stop();
-  bool running() const { return running_.load(); }
+  bool running() const
+  {
+    return running_.load();
+  }
   std::string nick() const;
 
   void join(const std::string& channel);
@@ -35,8 +38,14 @@ class IrcSession {
   void quote(const std::string& raw);
   void change_nick(const std::string& nick);
   void send_lag_ping();
-  bool tls() const { return tls_; }
-  int lag_ms() const { return lag_ms_.load(); }
+  bool tls() const
+  {
+    return tls_;
+  }
+  int lag_ms() const
+  {
+    return lag_ms_.load();
+  }
 
   sigc::signal<void, Glib::ustring> signal_line;
   sigc::signal<void> signal_registered;
