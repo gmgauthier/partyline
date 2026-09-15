@@ -31,7 +31,7 @@ Repos: https://gitea.scriptorium/gmgauthier/partyline (origin), https://github.c
 | Init | No systemd. Config `~/.config/partyline/partyline.ini` |
 | Brand | LCOS beige / navy. No Bryan’s seal. Mark is two handsets on a shared line |
 | License | The Unlicense |
-| Versioning | `meson.build` is the source of truth |
+| Versioning | Semantic (`MAJOR.MINOR.PATCH`). `meson.build` is the source of truth. Debian changelog and git tag `vX.Y.Z` match it. See **Process**. |
 
 ## Why we write our own
 
@@ -131,3 +131,44 @@ After v1: SASL, query windows, channel logs, highlight, notify, DCC, ident, auto
 - DCC in v1
 - Quassel-style core process
 - Auto-connect + auto-join as defaults
+
+## Process
+
+Do not commit to `master`. Every change lands through a pull request.
+
+### Branches
+
+- `feature/<short-name>` — new user-visible work
+- `fix/<short-name>` — bugs, packaging nits, regressions
+
+Open a pull request into `master`. Merge only after review.
+
+### Gates
+
+A pull request must pass **lint** before merge. CI runs `./scripts/lint.sh` (no `--fix`). Locally:
+
+- `./scripts/lint.sh --fix` — clang-format rewrites `src/`
+- `./scripts/lint.sh` — SPDX headers, no tabs, clang-format `--dry-run --Werror`, cppcheck (`warning`) on `src/`
+- `meson compile` with this tree’s `warning_level=2` is clean (no new warnings)
+
+Do not pass `--fix` in CI. Do not merge a red PR.
+
+**Tests** are required when they exist (`meson test -C build`). Until a test suite lands, the gate is lint plus a clean compile plus a manual pass of the change.
+
+### Semantic versioning
+
+Every **shipped** pull request — merged to `master` and tagged as a release — bumps the version. `meson.build` is the source of truth. Keep these in lockstep in the same PR:
+
+- `meson.build` `version:`
+- `debian/changelog` (new stanza)
+- git tag `vMAJOR.MINOR.PATCH` after merge
+
+Then `./scripts/release.sh` produces `.deb`, tarball, and AppImage.
+
+| Bump | When |
+|---|---|
+| **PATCH** (`x.y.Z`) | Bug fix or packaging. No new user-facing feature. |
+| **MINOR** (`x.Y.0`) | New backward-compatible feature. |
+| **MAJOR** (`X.0.0`) | Breaking change: native file format, dropped config keys, removed UI users rely on. |
+
+While the version is `0.y.z`, still bump MINOR and PATCH this way. Do not treat 0.x as a free-for-all. The Debian revision (`-1`, `-2`) is only for rebuilding the same upstream version with no source change.

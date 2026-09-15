@@ -111,8 +111,8 @@ std::string utf8_clean(std::string s)
     return s;
   GError* err = nullptr;
   gsize out_len = 0;
-  gchar* conv = g_convert(s.data(), static_cast<gssize>(s.size()), "UTF-8", "ISO-8859-1",
-                          nullptr, &out_len, &err);
+  gchar* conv = g_convert(s.data(), static_cast<gssize>(s.size()), "UTF-8", "ISO-8859-1", nullptr,
+                          &out_len, &err);
   if (conv && !err) {
     std::string out(conv, out_len);
     g_free(conv);
@@ -164,8 +164,8 @@ std::string IrcSession::nick() const
   return nick_;
 }
 
-void IrcSession::start(std::string host, guint16 port, bool tls, bool tls_verify,
-                       std::string nick, std::string realname)
+void IrcSession::start(std::string host, guint16 port, bool tls, bool tls_verify, std::string nick,
+                       std::string realname)
 {
   stop();
   host_ = std::move(host);
@@ -496,8 +496,8 @@ void IrcSession::thread_main()
     auto client = Gio::SocketClient::create();
     client->set_tls(tls_);
     if (tls_ && !tls_verify_) {
-      const auto flags = static_cast<Gio::TlsCertificateFlags>(
-          Gio::TLS_CERTIFICATE_VALIDATE_ALL & ~Gio::TLS_CERTIFICATE_BAD_IDENTITY);
+      const auto flags = static_cast<Gio::TlsCertificateFlags>(Gio::TLS_CERTIFICATE_VALIDATE_ALL &
+                                                               ~Gio::TLS_CERTIFICATE_BAD_IDENTITY);
       client->set_tls_validation_flags(flags);
     }
     enqueue({Event::Line,
@@ -561,8 +561,9 @@ void IrcSession::thread_main()
     }
   } catch (const Glib::Error& e) {
     if (timed_out) {
-      finish = "Connection timed out after 20s. Check host, port, and TLS "
-               "(Undernet is 6667 with TLS off).";
+      finish =
+          "Connection timed out after 20s. Check host, port, and TLS "
+          "(Undernet is 6667 with TLS off).";
     } else if (!(cancellable_ && cancellable_->is_cancelled())) {
       finish = e.what();
       const std::string w = e.what();

@@ -19,16 +19,18 @@ First run (no `~/.config/partyline/partyline.ini`) loads the shipped server list
 | Doc | What |
 |---|---|
 | [INSTALL.md](INSTALL.md) | `.deb`, tarball, AppImage, git build |
-| [DEVELOPMENT.md](DEVELOPMENT.md) | Locked decisions, architecture, milestones M0–M6 |
+| [DEVELOPMENT.md](DEVELOPMENT.md) | Locked decisions, architecture, milestones M0–M6, branching, semver, lint |
 
 ## Build
 
 ```
-sudo apt install build-essential meson ninja-build pkg-config g++ libgtkmm-3.0-dev
+sudo apt install build-essential meson ninja-build pkg-config g++ libgtkmm-3.0-dev clang-format cppcheck
 meson setup build
 meson compile -C build
 ./build/partyline
 ```
+
+PR lint gate: `./scripts/lint.sh` (CI runs this; no `--fix`). Format `src/` locally with `./scripts/lint.sh --fix`.
 
 ## License
 
