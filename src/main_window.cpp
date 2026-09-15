@@ -52,8 +52,8 @@ bool nav_motion(Gtk::TreeView& view, Gtk::TreeModel::Path& hover, GdkEventMotion
   Gtk::TreeModel::Path path;
   Gtk::TreeViewColumn* col = nullptr;
   int cx = 0, cy = 0, bx = 0, by = 0;
-  view.convert_widget_to_bin_window_coords(static_cast<int>(event->x),
-                                           static_cast<int>(event->y), bx, by);
+  view.convert_widget_to_bin_window_coords(static_cast<int>(event->x), static_cast<int>(event->y),
+                                           bx, by);
   if (view.get_path_at_pos(bx, by, path, col, cx, cy) && path.size() > 0) {
     if (hover.size() == 0 || hover != path) {
       hover = path;
@@ -159,8 +159,8 @@ void MainWindow::load_css()
   try {
     auto css = Gtk::CssProvider::create();
     css->load_from_path(css_path);
-    Gtk::StyleContext::add_provider_for_screen(
-        Gdk::Screen::get_default(), css, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    Gtk::StyleContext::add_provider_for_screen(Gdk::Screen::get_default(), css,
+                                               GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
   } catch (const Glib::Error& e) {
     std::cerr << "partyline: CSS: " << e.what() << "\n";
   }
@@ -206,8 +206,7 @@ void MainWindow::build_menu()
   view->append(*view_nicks_item_);
   view_status_item_ = Gtk::manage(new Gtk::CheckMenuItem("_Status bar", true));
   view_status_item_->set_active(true);
-  view_status_item_->signal_toggled().connect(
-      sigc::mem_fun(*this, &MainWindow::on_toggle_status));
+  view_status_item_->signal_toggled().connect(sigc::mem_fun(*this, &MainWindow::on_toggle_status));
   view->append(*view_status_item_);
   view->append(*Gtk::manage(new Gtk::SeparatorMenuItem()));
   auto* pal_menu = Gtk::manage(new Gtk::Menu());
@@ -269,14 +268,13 @@ void MainWindow::build_body()
         col->set_cell_data_func(*text, sigc::mem_fun(*this, &MainWindow::on_tree_cell_data));
     }
   }
-  tree_view_.add_events(Gdk::POINTER_MOTION_MASK | Gdk::LEAVE_NOTIFY_MASK |
-                        Gdk::BUTTON_PRESS_MASK);
-  tree_view_.signal_motion_notify_event().connect(
-      sigc::mem_fun(*this, &MainWindow::on_tree_motion), false);
-  tree_view_.signal_leave_notify_event().connect(
-      sigc::mem_fun(*this, &MainWindow::on_tree_leave), false);
-  tree_view_.signal_button_press_event().connect(
-      sigc::mem_fun(*this, &MainWindow::on_tree_button), false);
+  tree_view_.add_events(Gdk::POINTER_MOTION_MASK | Gdk::LEAVE_NOTIFY_MASK | Gdk::BUTTON_PRESS_MASK);
+  tree_view_.signal_motion_notify_event().connect(sigc::mem_fun(*this, &MainWindow::on_tree_motion),
+                                                  false);
+  tree_view_.signal_leave_notify_event().connect(sigc::mem_fun(*this, &MainWindow::on_tree_leave),
+                                                 false);
+  tree_view_.signal_button_press_event().connect(sigc::mem_fun(*this, &MainWindow::on_tree_button),
+                                                 false);
   tree_scroll_.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
   tree_scroll_.add(tree_view_);
   tree_scroll_.set_size_request(160, -1);
@@ -306,8 +304,7 @@ void MainWindow::build_body()
   input_.set_sensitive(false);
   btn_send_.set_sensitive(false);
   input_.signal_activate().connect(sigc::mem_fun(*this, &MainWindow::on_send));
-  input_.signal_key_press_event().connect(sigc::mem_fun(*this, &MainWindow::on_input_key),
-                                          false);
+  input_.signal_key_press_event().connect(sigc::mem_fun(*this, &MainWindow::on_input_key), false);
   btn_send_.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_send));
   input_row_.set_border_width(4);
   input_row_.pack_start(input_target_, Gtk::PACK_SHRINK);
@@ -334,14 +331,13 @@ void MainWindow::build_body()
         col->set_cell_data_func(*text, sigc::mem_fun(*this, &MainWindow::on_nick_cell_data));
     }
   }
-  nick_view_.add_events(Gdk::POINTER_MOTION_MASK | Gdk::LEAVE_NOTIFY_MASK |
-                        Gdk::BUTTON_PRESS_MASK);
-  nick_view_.signal_motion_notify_event().connect(
-      sigc::mem_fun(*this, &MainWindow::on_nick_motion), false);
-  nick_view_.signal_leave_notify_event().connect(
-      sigc::mem_fun(*this, &MainWindow::on_nick_leave), false);
-  nick_view_.signal_button_press_event().connect(
-      sigc::mem_fun(*this, &MainWindow::on_nick_button), false);
+  nick_view_.add_events(Gdk::POINTER_MOTION_MASK | Gdk::LEAVE_NOTIFY_MASK | Gdk::BUTTON_PRESS_MASK);
+  nick_view_.signal_motion_notify_event().connect(sigc::mem_fun(*this, &MainWindow::on_nick_motion),
+                                                  false);
+  nick_view_.signal_leave_notify_event().connect(sigc::mem_fun(*this, &MainWindow::on_nick_leave),
+                                                 false);
+  nick_view_.signal_button_press_event().connect(sigc::mem_fun(*this, &MainWindow::on_nick_button),
+                                                 false);
   nick_scroll_.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
   nick_scroll_.add(nick_view_);
   nick_scroll_.set_size_request(140, -1);
@@ -432,8 +428,7 @@ const Server* MainWindow::selected_server()
   return settings_.find_id(id.raw());
 }
 
-void MainWindow::select_tree(int kind, const Glib::ustring& server_id,
-                             const Glib::ustring& channel)
+void MainWindow::select_tree(int kind, const Glib::ustring& server_id, const Glib::ustring& channel)
 {
   suppress_tree_ = true;
   tree_store_->foreach_iter([this, kind, server_id, channel](const Gtk::TreeModel::iterator& it) {
@@ -517,8 +512,8 @@ void MainWindow::show_pane(Pane pane)
 
 void MainWindow::show_not_yet(const Glib::ustring& feature)
 {
-  Gtk::MessageDialog dlg(*this, feature + " is later.", false, Gtk::MESSAGE_INFO,
-                         Gtk::BUTTONS_OK, true);
+  Gtk::MessageDialog dlg(*this, feature + " is later.", false, Gtk::MESSAGE_INFO, Gtk::BUTTONS_OK,
+                         true);
   dlg.set_title("Partyline");
   dlg.set_secondary_text("Polish (keys, palettes, /nick) is M5.");
   dlg.run();
@@ -934,7 +929,7 @@ void MainWindow::on_session_quit(const Glib::ustring& nick)
 }
 
 void MainWindow::on_session_names(const Glib::ustring& channel,
-                                 const std::vector<Glib::ustring>& nicks)
+                                  const std::vector<Glib::ustring>& nicks)
 {
   Chan* ch = find_chan(channel);
   if (!ch)
@@ -1108,16 +1103,15 @@ void MainWindow::apply_palette()
   int i = settings_.palette;
   if (i < 0 || i > 4)
     i = 0;
-  const std::string css =
-      Glib::ustring::compose(
-          "textview.partyline-buffer, textview.partyline-buffer text {"
-          " background-color: %1; color: %2; }",
-          bg[i], fg[i])
-          .raw();
+  const std::string css = Glib::ustring::compose(
+                              "textview.partyline-buffer, textview.partyline-buffer text {"
+                              " background-color: %1; color: %2; }",
+                              bg[i], fg[i])
+                              .raw();
   if (!palette_css_) {
     palette_css_ = Gtk::CssProvider::create();
-    Gtk::StyleContext::add_provider_for_screen(
-        Gdk::Screen::get_default(), palette_css_, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+    Gtk::StyleContext::add_provider_for_screen(Gdk::Screen::get_default(), palette_css_,
+                                               GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
   }
   try {
     palette_css_->load_from_data(css);
@@ -1138,8 +1132,8 @@ void MainWindow::on_palette(int id)
 void MainWindow::start_lag_timer()
 {
   stop_lag_timer();
-  lag_conn_ = Glib::signal_timeout().connect_seconds(
-      sigc::mem_fun(*this, &MainWindow::on_lag_tick), 60);
+  lag_conn_ =
+      Glib::signal_timeout().connect_seconds(sigc::mem_fun(*this, &MainWindow::on_lag_tick), 60);
 }
 
 void MainWindow::stop_lag_timer()
