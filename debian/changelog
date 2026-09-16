@@ -1,3 +1,9 @@
+partyline (0.1.2-1) unstable; urgency=medium
+
+  * Standardize GTK theming for LCOS: Clearlooks-Phenix, then Clearlooks, then Adwaita:light.
+
+ -- Greg Gauthier <gmgauthier@protonmail.com>  Wed, 16 Sep 2026 20:21:00 +0100
+
 partyline (0.1.1-1) unstable; urgency=medium
 
   * Nav lists: paint hover/sticky on tree and nick list (Adwaita/i3).
