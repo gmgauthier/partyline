@@ -1,6 +1,6 @@
 # Partyline backlog
 
-Current release: **v0.1.1**. Last updated: 2026-09-15.
+Current release: **v0.1.1**. Last updated: 2026-09-16.
 
 mIRC 5.x / 6. Binary `partyline`. Suite catalog: `lcos-projects/PRODUCT-BACKLOG.md`. Design: `lcos-projects/IRC.md`. Plan: [DEVELOPMENT.md](DEVELOPMENT.md). How to land work: [DEVELOPMENT.md](DEVELOPMENT.md#process) — `feature/` / `fix/` branches, PRs to `master`, lint gate, semver on shipped PRs.
 
@@ -16,7 +16,7 @@ Nothing queued as a next slice. After v1 has been lived with, the first real hol
 - `/whois`
 - Auto-join (checkbox, default off — not a reconnect storm)
 - SASL (parked unless the TLS wrap makes it cheap)
-- Channel logs
+- **Local chat history** — append-only text file per IRC server and channel (and later per query nick). Path under `~/.local/share/partyline/logs/` (or similar), one file such as `libera.chat/#lcos.txt`. Write as lines arrive; do not require a bouncer or IRCv3 chathistory. Logs are a file on disk, not the product identity (do not build a log-browser app).
 - Highlight
 - Notify
 - DCC
