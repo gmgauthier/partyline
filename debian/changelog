@@ -1,3 +1,10 @@
+partyline (0.2.0-1) unstable; urgency=medium
+
+  * Local chat logs (replay last 500 lines on join).
+  * /whois, /list and Channels… window, nick pane width, Leave menu.
+
+ -- Greg Gauthier <gmgauthier@protonmail.com>  Wed, 16 Sep 2026 22:30:00 +0100
+
 partyline (0.1.2-1) unstable; urgency=medium
 
   * Standardize GTK theming for LCOS: Clearlooks-Phenix, then Clearlooks, then Adwaita:light.
