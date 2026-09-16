@@ -225,6 +225,7 @@ void MainWindow::build_menu()
   auto* tools = Gtk::manage(new Gtk::Menu());
   add_item(*tools, "_Join…", sigc::mem_fun(*this, &MainWindow::on_join), GDK_KEY_j,
            Gdk::CONTROL_MASK);
+  add_item(*tools, "_Channels…", sigc::mem_fun(*this, &MainWindow::on_channels));
   add_menu("_Tools", *tools);
 
   auto* help = Gtk::manage(new Gtk::Menu());
@@ -239,12 +240,15 @@ void MainWindow::build_toolbar()
   toolbar_.pack_start(btn_disconnect_, Gtk::PACK_SHRINK);
   toolbar_.pack_start(*toolbar_sep(), Gtk::PACK_SHRINK);
   toolbar_.pack_start(btn_join_, Gtk::PACK_SHRINK);
+  toolbar_.pack_start(btn_channels_, Gtk::PACK_SHRINK);
 
   btn_disconnect_.set_sensitive(false);
   btn_join_.set_sensitive(false);
+  btn_channels_.set_sensitive(false);
   btn_connect_.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_connect));
   btn_disconnect_.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_disconnect));
   btn_join_.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_join));
+  btn_channels_.signal_clicked().connect(sigc::mem_fun(*this, &MainWindow::on_channels));
 }
 
 void MainWindow::build_body()
@@ -340,11 +344,17 @@ void MainWindow::build_body()
                                                  false);
   nick_scroll_.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
   nick_scroll_.add(nick_view_);
-  nick_scroll_.set_size_request(140, -1);
+  const int nick_w = nick_pane_width();
+  nick_scroll_.set_size_request(nick_w, -1);
 
   inner_.pack1(centre_, true, false);
-  inner_.pack2(nick_scroll_, false, true);
-  inner_.set_position(620);
+  inner_.pack2(nick_scroll_, false, false);
+  inner_.signal_size_allocate().connect(sigc::mem_fun(*this, &MainWindow::on_inner_allocate));
+
+  auto* leave = Gtk::manage(new Gtk::MenuItem("_Leave", true));
+  leave->signal_activate().connect(sigc::mem_fun(*this, &MainWindow::on_tree_leave_channel));
+  chan_menu_.append(*leave);
+  chan_menu_.show_all();
 
   outer_.pack1(tree_scroll_, false, true);
   outer_.pack2(inner_, true, false);
@@ -483,7 +493,9 @@ void MainWindow::append_channel(const Glib::ustring& channel, const Glib::ustrin
   Chan* ch = find_chan(channel);
   if (!ch)
     return;
-  ch->buf->insert(ch->buf->end(), ensure_utf8(text) + "\n");
+  const Glib::ustring line = ensure_utf8(text);
+  ch->buf->insert(ch->buf->end(), line + "\n");
+  chat_log_.write_channel(channel.raw(), line.raw());
   if (pane_ == Pane::Channel && same_chan(current_channel_, channel))
     scroll_end(buffer_);
 }
@@ -524,10 +536,13 @@ void MainWindow::set_connected_ui(bool on)
   btn_connect_.set_sensitive(!on);
   btn_disconnect_.set_sensitive(on);
   btn_join_.set_sensitive(on && registered_);
+  btn_channels_.set_sensitive(on && registered_);
   input_.set_sensitive(on && registered_);
   btn_send_.set_sensitive(on && registered_);
   if (!on) {
     registered_ = false;
+    if (channels_win_)
+      channels_win_->hide();
     reset_channels();
     fill_tree_idle();
     show_pane(Pane::Status);
@@ -707,9 +722,28 @@ void MainWindow::handle_command(const Glib::ustring& line)
       session_->privmsg(target.raw(), msg.raw());
       if (find_chan(target))
         append_channel(target, "<" + connected_nick_ + "> " + msg);
-      else
-        append_status("* -> " + target + ": " + msg);
+      else {
+        const Glib::ustring out = "* -> " + target + ": " + msg;
+        append_status(out);
+        chat_log_.write_query(target.raw(), out.raw());
+      }
     }
+  } else if (low == "whois") {
+    Glib::ustring nick = rest;
+    while (!nick.empty() && nick[0] == ' ')
+      nick = nick.substr(1);
+    if (session_ && !nick.empty())
+      session_->whois(nick.raw());
+    else
+      append_status("* usage: /whois <nick>");
+  } else if (low == "list") {
+    if (session_ && registered_) {
+      ensure_channels_window();
+      channels_win_->clear();
+      channels_win_->present();
+      session_->list_channels(rest.raw());
+    } else
+      append_status("* not connected");
   } else if (session_)
     session_->quote(line.substr(1).raw());
 }
@@ -755,6 +789,7 @@ void MainWindow::on_connect()
   connected_host_ = s->host;
   connected_nick_ = nick;
   connected_server_id_ = s->id;
+  chat_log_.set_host(s->host);
   settings_.last_server = s->id;
   settings_.save();
 
@@ -780,6 +815,9 @@ void MainWindow::on_connect()
   session_->signal_names.connect(sigc::mem_fun(*this, &MainWindow::on_session_names));
   session_->signal_nick.connect(sigc::mem_fun(*this, &MainWindow::on_session_nick));
   session_->signal_lag.connect(sigc::mem_fun(*this, &MainWindow::on_session_lag));
+  session_->signal_list_start.connect(sigc::mem_fun(*this, &MainWindow::on_list_start));
+  session_->signal_list_row.connect(sigc::mem_fun(*this, &MainWindow::on_list_row));
+  session_->signal_list_end.connect(sigc::mem_fun(*this, &MainWindow::on_list_end));
   session_->start(s->host, static_cast<guint16>(s->port), s->tls, s->tls_verify, nick.raw(),
                   settings_.realname.empty() ? nick.raw() : settings_.realname);
 }
@@ -798,6 +836,45 @@ void MainWindow::on_join()
   if (dlg.run() != Gtk::RESPONSE_OK)
     return;
   do_join(dlg.channel());
+}
+
+void MainWindow::ensure_channels_window()
+{
+  if (channels_win_)
+    return;
+  channels_win_ = std::make_unique<ChannelsWindow>(*this);
+  channels_win_->signal_join.connect([this](const Glib::ustring& ch) { do_join(ch); });
+}
+
+void MainWindow::on_channels()
+{
+  if (!registered_ || !session_)
+    return;
+  ensure_channels_window();
+  channels_win_->clear();
+  channels_win_->present();
+  session_->list_channels({});
+}
+
+void MainWindow::on_list_start()
+{
+  ensure_channels_window();
+  channels_win_->clear();
+  channels_win_->set_listing(true);
+  channels_win_->present();
+}
+
+void MainWindow::on_list_row(const Glib::ustring& channel, int users, const Glib::ustring& topic)
+{
+  if (!channels_win_)
+    return;
+  channels_win_->add_row(channel, users, topic);
+}
+
+void MainWindow::on_list_end()
+{
+  if (channels_win_)
+    channels_win_->finish();
 }
 
 void MainWindow::on_send()
@@ -846,6 +923,7 @@ void MainWindow::on_session_registered()
   settings_.last_server = connected_server_id_.raw();
   settings_.save();
   btn_join_.set_sensitive(true);
+  btn_channels_.set_sensitive(true);
   input_.set_sensitive(true);
   btn_send_.set_sensitive(true);
   start_lag_timer();
@@ -866,8 +944,11 @@ void MainWindow::on_session_privmsg(const Glib::ustring& target, const Glib::ust
 {
   if (find_chan(target))
     append_channel(target, "<" + nick + "> " + text);
-  else if (nick_eq(target, connected_nick_))
-    append_status("* " + nick + ": " + text);
+  else if (nick_eq(target, connected_nick_)) {
+    const Glib::ustring out = "* " + nick + ": " + text;
+    append_status(out);
+    chat_log_.write_query(nick.raw(), out.raw());
+  }
 }
 
 void MainWindow::on_session_join(const Glib::ustring& channel, const Glib::ustring& nick, bool me)
@@ -877,6 +958,11 @@ void MainWindow::on_session_join(const Glib::ustring& channel, const Glib::ustri
       Chan ch;
       ch.name = channel;
       ch.buf = Gtk::TextBuffer::create();
+      const auto hist = chat_log_.tail_channel(channel.raw(), 500);
+      for (const auto& line : hist)
+        ch.buf->insert(ch.buf->end(), ensure_utf8(line) + "\n");
+      if (!hist.empty())
+        ch.buf->insert(ch.buf->end(), "---\n");
       channels_.push_back(std::move(ch));
     }
     append_channel(channel, "* Now talking in " + channel);
@@ -972,9 +1058,40 @@ bool MainWindow::on_tree_leave(GdkEventCrossing* event)
   return nav_leave(tree_view_, tree_hover_path_, event);
 }
 
+int MainWindow::nick_pane_width()
+{
+  auto layout = nick_view_.create_pango_layout("0123456789abcde");
+  int tw = 0, th = 0;
+  layout->get_pixel_size(tw, th);
+  return tw + 28;
+}
+
+void MainWindow::on_inner_allocate(Gtk::Allocation& alloc)
+{
+  if (!nick_scroll_.get_visible())
+    return;
+  const int total = alloc.get_width();
+  const int want = nick_pane_width();
+  if (total < want + 160)
+    return;
+  const int pos = total - want;
+  if (std::abs(inner_.get_position() - pos) > 4)
+    inner_.set_position(pos);
+}
+
+void MainWindow::on_tree_leave_channel()
+{
+  auto it = tree_store_->get_iter(chan_menu_path_);
+  if (!it || (*it)[col_tree_kind_] != 2)
+    return;
+  const Glib::ustring name = (*it)[col_tree_name_];
+  if (session_ && registered_ && find_chan(name))
+    session_->part(name.raw());
+}
+
 bool MainWindow::on_tree_button(GdkEventButton* event)
 {
-  if (!event || event->button != 1 || event->type != GDK_BUTTON_PRESS)
+  if (!event || event->type != GDK_BUTTON_PRESS)
     return false;
   Gtk::TreeModel::Path path;
   Gtk::TreeViewColumn* col = nullptr;
@@ -982,6 +1099,17 @@ bool MainWindow::on_tree_button(GdkEventButton* event)
   tree_view_.convert_widget_to_bin_window_coords(static_cast<int>(event->x),
                                                  static_cast<int>(event->y), bx, by);
   if (!tree_view_.get_path_at_pos(bx, by, path, col, cx, cy) || path.size() == 0)
+    return false;
+  if (event->button == 3) {
+    auto it = tree_store_->get_iter(path);
+    if (it && (*it)[col_tree_kind_] == 2) {
+      chan_menu_path_ = path;
+      chan_menu_.popup(event->button, event->time);
+      return true;
+    }
+    return false;
+  }
+  if (event->button != 1)
     return false;
   apply_tree_path(path);
   return false;

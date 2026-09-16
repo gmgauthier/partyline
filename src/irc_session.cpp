@@ -6,6 +6,7 @@
 #include <glib.h>
 
 #include <chrono>
+#include <cstdlib>
 
 namespace partyline {
 namespace {
@@ -102,6 +103,45 @@ std::string strip_irc_format(const std::string& in)
     ++i;
   }
   return out;
+}
+
+/* Human WHOIS lines for Status. Empty if this numeric is not WHOIS. */
+std::string format_whois(const std::string& cmd, const std::vector<std::string>& p)
+{
+  auto at = [&](size_t i) -> const std::string& {
+    static const std::string empty;
+    return i < p.size() ? p[i] : empty;
+  };
+  const std::string& nick = at(1);
+  if (cmd == "311" && p.size() >= 4) {
+    std::string s = "* " + nick + " is " + at(2) + "@" + at(3);
+    if (p.size() >= 6 && !p.back().empty())
+      s += " (" + p.back() + ")";
+    return s;
+  }
+  if (cmd == "312" && p.size() >= 3)
+    return "* " + nick + " using " + at(2) + (p.size() >= 4 ? " (" + p.back() + ")" : "");
+  if (cmd == "313")
+    return "* " + nick + " is an IRC operator";
+  if (cmd == "301" && p.size() >= 2)
+    return "* " + nick + " is away" + (p.size() >= 3 ? ": " + p.back() : "");
+  if (cmd == "317" && p.size() >= 3)
+    return "* " + nick + " idle " + at(2) + "s" + (p.size() >= 5 ? ", signon " + at(3) : "");
+  if (cmd == "318")
+    return "* " + nick + " End of /WHOIS list.";
+  if (cmd == "319" && p.size() >= 3)
+    return "* " + nick + " on " + p.back();
+  if (cmd == "330" && p.size() >= 3)
+    return "* " + nick + " is logged in as " + at(2);
+  if (cmd == "338" && p.size() >= 3)
+    return "* " + nick + " actually " + at(2);
+  if (cmd == "671")
+    return "* " + nick + " is using a secure connection";
+  if (cmd == "401" && p.size() >= 2)
+    return "* " + nick + " No such nick/channel";
+  if (cmd == "402" && p.size() >= 2)
+    return "* " + nick + " No such server";
+  return {};
 }
 
 std::string utf8_clean(std::string s)
@@ -246,6 +286,21 @@ void IrcSession::privmsg(const std::string& target, const std::string& text)
   write_line("PRIVMSG " + target + " :" + body);
 }
 
+void IrcSession::whois(const std::string& nick)
+{
+  if (nick.empty())
+    return;
+  write_line("WHOIS " + nick);
+}
+
+void IrcSession::list_channels(const std::string& mask)
+{
+  if (mask.empty())
+    write_line("LIST");
+  else
+    write_line("LIST " + mask);
+}
+
 void IrcSession::quote(const std::string& raw)
 {
   if (!raw.empty())
@@ -327,6 +382,15 @@ void IrcSession::on_dispatch()
       case Event::Lag:
         signal_lag.emit();
         break;
+      case Event::ListStart:
+        signal_list_start.emit();
+        break;
+      case Event::ListRow:
+        signal_list_row.emit(ev.channel, ev.users, ev.text);
+        break;
+      case Event::ListEnd:
+        signal_list_end.emit();
+        break;
     }
   }
 }
@@ -361,7 +425,7 @@ void IrcSession::handle_line(const std::string& line)
 
   if (cmd == "PING") {
     write_line("PONG " + ping_payload(line));
-    enqueue({Event::Line, line, {}, {}, false, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}});
     return;
   }
 
@@ -371,14 +435,14 @@ void IrcSession::handle_line(const std::string& line)
     if (is_ctcp_version(text)) {
       if (!p.nick.empty())
         write_line(std::string("NOTICE ") + p.nick + " :\x01VERSION Partyline " VERSION "\x01");
-      enqueue({Event::Line, line, {}, {}, false, {}});
+      enqueue({Event::Line, line, {}, {}, false, 0, {}});
       return;
     }
     if (!text.empty() && text[0] == '\x01') {
-      enqueue({Event::Line, line, {}, {}, false, {}});
+      enqueue({Event::Line, line, {}, {}, false, 0, {}});
       return;
     }
-    enqueue({Event::Line, line, {}, {}, false, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}});
     Event ev;
     ev.type = Event::Privmsg;
     ev.channel = target;
@@ -394,7 +458,7 @@ void IrcSession::handle_line(const std::string& line)
     ev.channel = p.params[0];
     ev.nick = p.nick;
     ev.me = is_me(p.nick);
-    enqueue({Event::Line, line, {}, {}, false, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}});
     enqueue(std::move(ev));
     return;
   }
@@ -405,13 +469,13 @@ void IrcSession::handle_line(const std::string& line)
     ev.channel = p.params[0];
     ev.nick = (cmd == "KICK" && p.params.size() >= 2) ? p.params[1] : p.nick;
     ev.me = is_me(ev.nick);
-    enqueue({Event::Line, line, {}, {}, false, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}});
     enqueue(std::move(ev));
     return;
   }
 
   if (cmd == "QUIT") {
-    enqueue({Event::Line, line, {}, {}, false, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}});
     Event ev;
     ev.type = Event::QuitNick;
     ev.nick = p.nick;
@@ -429,7 +493,7 @@ void IrcSession::handle_line(const std::string& line)
       std::lock_guard<std::mutex> lock(nick_mu_);
       nick_ = ev.text;
     }
-    enqueue({Event::Line, line, {}, {}, false, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}});
     enqueue(std::move(ev));
     return;
   }
@@ -440,7 +504,7 @@ void IrcSession::handle_line(const std::string& line)
       const gint64 now = g_get_monotonic_time();
       lag_ms_.store(static_cast<int>((now - lag_sent_us_) / 1000));
       lag_token_.clear();
-      enqueue({Event::Lag, {}, {}, {}, false, {}});
+      enqueue({Event::Lag, {}, {}, {}, false, 0, {}});
       return;
     }
   }
@@ -453,7 +517,7 @@ void IrcSession::handle_line(const std::string& line)
       names_acc_.clear();
     }
     split_nicks(names, names_acc_);
-    enqueue({Event::Line, line, {}, {}, false, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}});
     return;
   }
 
@@ -464,8 +528,52 @@ void IrcSession::handle_line(const std::string& line)
     ev.nicks = names_acc_;
     names_acc_.clear();
     names_chan_.clear();
-    enqueue({Event::Line, line, {}, {}, false, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}});
     enqueue(std::move(ev));
+    return;
+  }
+
+  {
+    const std::string who = format_whois(cmd, p.params);
+    if (!who.empty()) {
+      enqueue({Event::Line, utf8_clean(who), {}, {}, false, 0, {}});
+      return;
+    }
+  }
+
+  if (cmd == "321") {
+    enqueue({Event::ListStart, {}, {}, {}, false, 0, {}});
+    return;
+  }
+  if (cmd == "322" && !p.params.empty()) {
+    std::string chan;
+    std::string count = "0";
+    std::string topic;
+    const auto chan_pfx = [](char c) { return c == '#' || c == '&' || c == '+' || c == '!'; };
+    if (!p.params[0].empty() && chan_pfx(p.params[0][0])) {
+      chan = p.params[0];
+      if (p.params.size() >= 2)
+        count = p.params[1];
+      if (p.params.size() >= 3)
+        topic = p.params.back();
+    } else if (p.params.size() >= 3) {
+      chan = p.params[1];
+      count = p.params[2];
+      if (p.params.size() >= 4)
+        topic = p.params.back();
+    }
+    if (!chan.empty()) {
+      Event ev;
+      ev.type = Event::ListRow;
+      ev.channel = utf8_clean(chan);
+      ev.users = std::atoi(count.c_str());
+      ev.text = utf8_clean(topic);
+      enqueue(std::move(ev));
+    }
+    return;
+  }
+  if (cmd == "323") {
+    enqueue({Event::ListEnd, {}, {}, {}, false, 0, {}});
     return;
   }
 
@@ -474,12 +582,12 @@ void IrcSession::handle_line(const std::string& line)
       std::lock_guard<std::mutex> lock(nick_mu_);
       nick_ = p.params[0];
     }
-    enqueue({Event::Line, line, {}, {}, false, {}});
-    enqueue({Event::Registered, {}, {}, {}, false, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}});
+    enqueue({Event::Registered, {}, {}, {}, false, 0, {}});
     return;
   }
 
-  enqueue({Event::Line, line, {}, {}, false, {}});
+  enqueue({Event::Line, line, {}, {}, false, 0, {}});
   if (cmd == "ERROR") {
     Event ev;
     ev.type = Event::Finished;
@@ -506,6 +614,7 @@ void IrcSession::thread_main()
              {},
              {},
              false,
+             0,
              {}});
 
     /* GIO's per-socket timeout tries every A record; a filtered port on a
@@ -583,7 +692,7 @@ void IrcSession::thread_main()
     sock_.reset();
   }
   running_.store(false);
-  enqueue({Event::Finished, finish, {}, {}, false, {}});
+  enqueue({Event::Finished, finish, {}, {}, false, 0, {}});
 }
 
 }  // namespace partyline
