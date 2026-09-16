@@ -2,7 +2,9 @@
 
 #pragma once
 
+#include "channels_dialog.hpp"
 #include "irc_session.hpp"
+#include "log.hpp"
 #include "settings.hpp"
 
 #include <gtkmm.h>
@@ -50,6 +52,7 @@ class MainWindow : public Gtk::Window {
   void on_connect();
   void on_disconnect();
   void on_join();
+  void on_channels();
   void on_send();
   void on_quit();
   void on_about();
@@ -74,11 +77,18 @@ class MainWindow : public Gtk::Window {
   void on_session_names(const Glib::ustring& channel, const std::vector<Glib::ustring>& nicks);
   void on_session_nick(const Glib::ustring& old_nick, const Glib::ustring& new_nick, bool me);
   void on_session_lag();
+  void on_list_start();
+  void on_list_row(const Glib::ustring& channel, int users, const Glib::ustring& topic);
+  void on_list_end();
+  void ensure_channels_window();
   void style_nav_column(Gtk::TreeView& view);
   void on_tree_cell_data(Gtk::CellRenderer* cell, const Gtk::TreeModel::const_iterator& it);
   bool on_tree_motion(GdkEventMotion* event);
   bool on_tree_leave(GdkEventCrossing* event);
   bool on_tree_button(GdkEventButton* event);
+  void on_tree_leave_channel();
+  void on_inner_allocate(Gtk::Allocation& alloc);
+  int nick_pane_width();
   void apply_tree_path(const Gtk::TreeModel::Path& path);
   void on_nick_cell_data(Gtk::CellRenderer* cell, const Gtk::TreeModel::const_iterator& it);
   bool on_nick_motion(GdkEventMotion* event);
@@ -98,6 +108,7 @@ class MainWindow : public Gtk::Window {
   Gtk::Button btn_connect_{"Connect"};
   Gtk::Button btn_disconnect_{"Disconnect"};
   Gtk::Button btn_join_{"Join…"};
+  Gtk::Button btn_channels_{"Channels…"};
   Gtk::CheckMenuItem* view_tree_item_ = nullptr;
   Gtk::CheckMenuItem* view_nicks_item_ = nullptr;
   Gtk::CheckMenuItem* view_status_item_ = nullptr;
@@ -119,6 +130,8 @@ class MainWindow : public Gtk::Window {
   Gtk::Button btn_send_{"Send"};
   Gtk::ScrolledWindow nick_scroll_;
   Gtk::TreeView nick_view_;
+  Gtk::Menu chan_menu_;
+  Gtk::TreeModel::Path chan_menu_path_;
   Gtk::Statusbar status_;
   guint status_ctx_ = 0;
 
@@ -144,6 +157,8 @@ class MainWindow : public Gtk::Window {
   const Chan* find_chan(const Glib::ustring& name) const;
 
   Settings settings_;
+  ChatLog chat_log_;
+  std::unique_ptr<ChannelsWindow> channels_win_;
   std::unique_ptr<IrcSession> session_;
   Glib::ustring connected_host_;
   Glib::ustring connected_nick_;
