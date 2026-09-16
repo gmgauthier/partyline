@@ -13,10 +13,8 @@ Nothing queued as a next slice. After v1 has been lived with, the first real hol
 ## Low Priority
 
 - Query windows
-- `/whois`
 - Auto-join (checkbox, default off — not a reconnect storm)
 - SASL (parked unless the TLS wrap makes it cheap)
-- **Local chat history** — append-only text file per IRC server and channel (and later per query nick). Path under `~/.local/share/partyline/logs/` (or similar), one file such as `libera.chat/#lcos.txt`. Write as lines arrive; do not require a bouncer or IRCv3 chathistory. Logs are a file on disk, not the product identity (do not build a log-browser app).
 - Highlight
 - Notify
 - DCC

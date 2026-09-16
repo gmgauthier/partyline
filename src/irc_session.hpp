@@ -36,6 +36,8 @@ class IrcSession {
   void part(const std::string& channel);
   void privmsg(const std::string& target, const std::string& text);
   void quote(const std::string& raw);
+  void whois(const std::string& nick);
+  void list_channels(const std::string& mask);
   void change_nick(const std::string& nick);
   void send_lag_ping();
   bool tls() const
@@ -57,6 +59,9 @@ class IrcSession {
   sigc::signal<void, Glib::ustring, std::vector<Glib::ustring>> signal_names;
   sigc::signal<void, Glib::ustring, Glib::ustring, bool> signal_nick;
   sigc::signal<void> signal_lag;
+  sigc::signal<void> signal_list_start;
+  sigc::signal<void, Glib::ustring, int, Glib::ustring> signal_list_row;
+  sigc::signal<void> signal_list_end;
 
  private:
   struct Event {
@@ -70,12 +75,16 @@ class IrcSession {
       QuitNick,
       Names,
       NickChange,
-      Lag
+      Lag,
+      ListStart,
+      ListRow,
+      ListEnd
     } type = Line;
     std::string text;
     std::string channel;
     std::string nick;
     bool me = false;
+    int users = 0;
     std::vector<std::string> nicks;
   };
 
