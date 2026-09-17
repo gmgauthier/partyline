@@ -10,9 +10,9 @@ Build-Depends:
  g++,
  libgtkmm-3.0-dev
 Standards-Version: 4.7.0
-Homepage: https://gitea.scriptorium/gmgauthier/partyline
-Vcs-Git: https://gitea.scriptorium/gmgauthier/partyline.git
-Vcs-Browser: https://gitea.scriptorium/gmgauthier/partyline
+Homepage: https://github.com/gmgauthier/partyline
+Vcs-Git: https://github.com/gmgauthier/partyline.git
+Vcs-Browser: https://github.com/gmgauthier/partyline
 Rules-Requires-Root: no
 
 Package: partyline
