@@ -12,7 +12,7 @@ LCOS itself: [https://github.com/BryanLunduke/LCOS](https://github.com/BryanLund
 
 ## Status
 
-**v0.2.0.** `.deb`, tarball, AppImage. See [INSTALL.md](INSTALL.md).
+**v0.2.1.** `.deb`, tarball, AppImage. Headless test suite and BUG-BACKLOG.md. See [INSTALL.md](INSTALL.md).
 
 First run (no `~/.config/partyline/partyline.ini`) loads the shipped server list (Undernet, EFNet, OFTC, Rizon UK, Libera). Nick comes from the local username.
 

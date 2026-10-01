@@ -1,3 +1,9 @@
+partyline (0.2.1-1) unstable; urgency=medium
+
+  * Add a headless meson test suite and record known defects in BUG-BACKLOG.md.
+
+ -- Greg Gauthier <gmgauthier@protonmail.com>  Thu, 01 Oct 2026 19:04:05 +0100
+
 partyline (0.2.0-1) unstable; urgency=medium
 
   * Local chat logs (replay last 500 lines on join).
