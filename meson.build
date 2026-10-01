@@ -71,3 +71,12 @@ install_data(
   rename: 'partyline.svg',
   install_dir: get_option('datadir') / 'icons' / 'hicolor' / 'scalable' / 'apps',
 )
+
+partyline_tests = executable(
+  'partyline-tests',
+  'tests/test_log.cpp',
+  'src/log.cpp',
+  include_directories: inc,
+  dependencies: [gtkmm],
+)
+test('log', partyline_tests)
