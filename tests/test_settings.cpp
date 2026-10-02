@@ -50,6 +50,34 @@ void test_unknown_server_or_empty_nick()
   CHECK(s.nick == "x");
 }
 
+void test_renaming_the_last_server_moves_last_server()
+{
+  auto s = two_servers();
+  std::string last = "libera";
+  s.servers[0].name = "Libera Chat";
+  partyline::Settings::assign_id(s.servers, 0, last);
+  CHECK(s.servers[0].id == "libera_chat");
+  CHECK(last == "libera_chat");
+
+  /* Renaming another server does not move it. */
+  s.servers[1].name = "OFTC net";
+  partyline::Settings::assign_id(s.servers, 1, last);
+  CHECK(s.servers[1].id == "oftc_net");
+  CHECK(last == "libera_chat");
+}
+
+void test_new_server_does_not_take_an_empty_last_server()
+{
+  auto s = two_servers();
+  std::string last;
+  partyline::Server n;
+  n.name = "OFTC";
+  s.servers.push_back(n);
+  partyline::Settings::assign_id(s.servers, 2, last);
+  CHECK(s.servers[2].id == "oftc_2");
+  CHECK(last.empty());
+}
+
 }  // namespace
 
 int main()
@@ -57,5 +85,7 @@ int main()
   test_nick_on_a_server_with_its_own_nick_updates_that_server();
   test_nick_on_a_server_without_one_updates_the_default();
   test_unknown_server_or_empty_nick();
+  test_renaming_the_last_server_moves_last_server();
+  test_new_server_does_not_take_an_empty_last_server();
   return suite_test::done("settings");
 }

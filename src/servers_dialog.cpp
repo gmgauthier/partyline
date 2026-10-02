@@ -10,6 +10,7 @@ ServersDialog::ServersDialog(Gtk::Window& parent, Settings& settings)
     : Gtk::Dialog("Servers", parent, true),
       settings_(settings),
       working_(settings.servers),
+      last_server_(settings.last_server),
       port_(Gtk::Adjustment::create(6697, 1, 65535, 1, 10), 1.0, 0)
 {
   set_default_size(560, 320);
@@ -140,7 +141,7 @@ void ServersDialog::store_row()
   s.nick = nick_.get_text().raw();
   if (s.name.empty())
     s.name = s.host.empty() ? "Server" : s.host;
-  unique_id(s);
+  Settings::assign_id(working_, static_cast<size_t>(current_), last_server_);
   suppress_ = true;
   for (auto& row : store_->children()) {
     if (row[col_index_] == current_) {
@@ -149,24 +150,6 @@ void ServersDialog::store_row()
     }
   }
   suppress_ = false;
-}
-
-void ServersDialog::unique_id(Server& s)
-{
-  std::string base = Settings::make_id(s.name.empty() ? s.host : s.name);
-  std::string id = base;
-  int n = 2;
-  auto taken = [&](const std::string& cand) {
-    for (const auto& o : working_) {
-      if (&o != &s && o.id == cand)
-        return true;
-    }
-    return false;
-  };
-  while (taken(id)) {
-    id = base + "_" + std::to_string(n++);
-  }
-  s.id = id;
 }
 
 void ServersDialog::on_add_server()
@@ -178,8 +161,8 @@ void ServersDialog::on_add_server()
   s.port = 6697;
   s.tls = true;
   s.tls_verify = true;
-  unique_id(s);
   working_.push_back(std::move(s));
+  Settings::assign_id(working_, working_.size() - 1, last_server_);
   refill();
   if (!store_->children().empty()) {
     auto it = store_->children().begin();
@@ -209,6 +192,7 @@ void ServersDialog::on_ok()
   if (settings_.nick.empty())
     settings_.nick = Settings::default_nick();
   settings_.servers = working_;
+  settings_.last_server = last_server_;
   settings_.seed_if_empty();
   settings_.save();
 }
