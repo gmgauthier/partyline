@@ -1,3 +1,9 @@
+partyline (0.2.5-1) unstable; urgency=medium
+
+  * Route channel NOTICEs to the channel buffer.
+
+ -- Greg Gauthier <gmgauthier@protonmail.com>  Fri, 02 Oct 2026 11:29:28 +0100
+
 partyline (0.2.4-1) unstable; urgency=medium
 
   * Lock the lag token against the socket thread.

@@ -1,7 +1,7 @@
 project(
   'partyline',
   'cpp',
-  version: '0.2.4',
+  version: '0.2.5',
   license: 'Unlicense',
   meson_version: '>=0.56',
   default_options: [
