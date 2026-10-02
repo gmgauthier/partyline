@@ -73,6 +73,8 @@ class MainWindow : public Gtk::Window {
                           const Glib::ustring& text);
   void on_session_notice(const Glib::ustring& channel, const Glib::ustring& nick,
                          const Glib::ustring& text);
+  void on_session_action(const Glib::ustring& target, const Glib::ustring& nick,
+                         const Glib::ustring& text);
   void on_session_join(const Glib::ustring& channel, const Glib::ustring& nick, bool me);
   void on_session_part(const Glib::ustring& channel, const Glib::ustring& nick, bool me);
   void on_session_quit(const Glib::ustring& nick);

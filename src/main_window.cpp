@@ -814,6 +814,7 @@ void MainWindow::on_connect()
   session_->signal_finished.connect(sigc::mem_fun(*this, &MainWindow::on_session_finished));
   session_->signal_privmsg.connect(sigc::mem_fun(*this, &MainWindow::on_session_privmsg));
   session_->signal_notice.connect(sigc::mem_fun(*this, &MainWindow::on_session_notice));
+  session_->signal_action.connect(sigc::mem_fun(*this, &MainWindow::on_session_action));
   session_->signal_join.connect(sigc::mem_fun(*this, &MainWindow::on_session_join));
   session_->signal_part.connect(sigc::mem_fun(*this, &MainWindow::on_session_part));
   session_->signal_quit_nick.connect(sigc::mem_fun(*this, &MainWindow::on_session_quit));
@@ -964,6 +965,18 @@ void MainWindow::on_session_notice(const Glib::ustring& channel, const Glib::ust
 {
   if (find_chan(channel))
     append_channel(channel, "-" + nick + "- " + text);
+}
+
+void MainWindow::on_session_action(const Glib::ustring& target, const Glib::ustring& nick,
+                                   const Glib::ustring& text)
+{
+  if (find_chan(target))
+    append_channel(target, "* " + nick + " " + text);
+  else if (nick_eq(target, connected_nick_)) {
+    const Glib::ustring out = "* " + nick + " " + text;
+    append_status(out);
+    chat_log_.write_query(nick.raw(), out.raw());
+  }
 }
 
 void MainWindow::on_session_join(const Glib::ustring& channel, const Glib::ustring& nick, bool me)
