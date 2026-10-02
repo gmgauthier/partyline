@@ -32,6 +32,10 @@ struct Settings {
   void load_from_file(const std::string& path, bool personal);
   Server* find_id(const std::string& id);
   const Server* find_id(const std::string& id) const;
+  /** Records a nick chosen while connected to server_id (e.g. /nick): it
+   *  replaces that server's own nick when it has one, otherwise the default
+   *  nick. An empty nick is ignored. */
+  void remember_nick(const std::string& server_id, const std::string& new_nick);
   static std::string make_id(const std::string& name);
   static std::string default_nick();
 };

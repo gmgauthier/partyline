@@ -178,6 +178,17 @@ const Server* Settings::find_id(const std::string& id) const
   return nullptr;
 }
 
+void Settings::remember_nick(const std::string& server_id, const std::string& new_nick)
+{
+  if (new_nick.empty())
+    return;
+  Server* srv = find_id(server_id);
+  if (srv && !srv->nick.empty())
+    srv->nick = new_nick;
+  else
+    nick = new_nick;
+}
+
 void Settings::load()
 {
   if (nick.empty())

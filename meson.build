@@ -89,3 +89,13 @@ session_tests = executable(
   dependencies: [gtkmm, dependency('threads')],
 )
 test('session', session_tests, timeout: 60)
+
+settings_tests = executable(
+  'partyline-settings-tests',
+  'tests/test_settings.cpp',
+  'src/settings.cpp',
+  'src/paths.cpp',
+  include_directories: inc,
+  dependencies: [gtkmm],
+)
+test('settings', settings_tests)

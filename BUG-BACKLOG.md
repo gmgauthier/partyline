@@ -2,17 +2,9 @@
 
 Reviewed 2026-10-01 against the 0.2.0 sources.
 
-`meson test` runs `tests/test_log.cpp` (`log`) and `tests/test_session.cpp` (`session`, an `IrcSession` against a one-client fake server on 127.0.0.1 from `tests/fake_irc.hpp`). It checks that a log written before `set_host` is dropped, that the host directory is lowercased, and that a leaf such as `../../tmp-escape` stays inside the host directory as `.._.._tmp-escape.txt`. It does not treat two different channel names collapsing to one file as correct. `/quote` is the intentional raw-command path and is not a defect. `session` checks that a CR or LF in a nick, real name, channel, mask, target, message, or `/quote` never reaches the socket as a second command.
+`meson test` runs `tests/test_log.cpp` (`log`), `tests/test_settings.cpp` (`settings`), and `tests/test_session.cpp` (`session`, an `IrcSession` against a one-client fake server on 127.0.0.1 from `tests/fake_irc.hpp`). It checks that a log written before `set_host` is dropped, that the host directory is lowercased, and that a leaf such as `../../tmp-escape` stays inside the host directory as `.._.._tmp-escape.txt`. It does not treat two different channel names collapsing to one file as correct. `/quote` is the intentional raw-command path and is not a defect. `session` checks that a CR or LF in a nick, real name, channel, mask, target, message, or `/quote` never reaches the socket as a second command.
 
 ## Open
-
-### Connect and /nick overwrite the global nick with a per-server nick
-
-- Severity: data-loss
-- Confidence: high
-- Where: `src/main_window.cpp:785`, `src/main_window.cpp:922`, `src/main_window.cpp:1214`
-- Trigger: A server row has its own nick. Connect. Or use `/nick` while connected.
-- Outcome: Connect uses `Server::nick` when it is set. On 001 the connected nick is written into `settings_.nick` and saved, replacing the global default. `/nick` does the same and does not update `Server::nick`, so the per-server override wins again on the next connect and the `/nick` is discarded.
 
 ### Renaming a server leaves last-server pointing at the old id
 
@@ -43,6 +35,15 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 None.
 
 ## Closed
+
+### Connect and /nick overwrite the global nick with a per-server nick
+
+- Severity: data-loss
+- Confidence: high
+- Where: `src/main_window.cpp:785`, `src/main_window.cpp:922`, `src/main_window.cpp:1214`
+- Trigger: A server row has its own nick. Connect. Or use `/nick` while connected.
+- Outcome: Connect uses `Server::nick` when it is set. On 001 the connected nick is written into `settings_.nick` and saved, replacing the global default. `/nick` does the same and does not update `Server::nick`, so the per-server override wins again on the next connect and the `/nick` is discarded.
+- Fixed in v0.2.8: Registration no longer writes the connected nick into the saved default. `/nick` goes through the new `Settings::remember_nick`, which updates the server's own nick when it has one and the default nick otherwise.
 
 ### A rejected nick leaves the input disabled
 
