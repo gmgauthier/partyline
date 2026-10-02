@@ -5,6 +5,7 @@
 
 #include <glib.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 
@@ -220,6 +221,30 @@ std::vector<std::string> irc_lines(const std::string& text)
   return out;
 }
 
+/* Longest PRIVMSG body sent in one line, in bytes. */
+constexpr size_t kMaxBody = 400;
+
+/* Splits text into pieces of at most max bytes without cutting a UTF-8
+ * sequence (a continuation byte never starts a piece). */
+std::vector<std::string> utf8_chunks(const std::string& text, size_t max)
+{
+  std::vector<std::string> out;
+  size_t i = 0;
+  while (i < text.size()) {
+    size_t end = std::min(text.size(), i + max);
+    if (end < text.size()) {
+      size_t cut = end;
+      while (cut > i && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80)
+        --cut;
+      if (cut > i)
+        end = cut;
+    }
+    out.push_back(text.substr(i, end - i));
+    i = end;
+  }
+  return out;
+}
+
 }  // namespace
 
 IrcSession::IrcSession()
@@ -312,16 +337,20 @@ void IrcSession::part(const std::string& channel)
     write_line("PART " + c);
 }
 
-void IrcSession::privmsg(const std::string& target, const std::string& text)
+IrcSession::SendResult IrcSession::privmsg(const std::string& target, const std::string& text)
 {
+  SendResult r;
   const std::string t = irc_token(target);
   if (t.empty() || text.empty())
-    return;
-  for (auto body : irc_lines(text)) {
-    if (body.size() > 400)
-      body.resize(400);
-    write_line("PRIVMSG " + t + " :" + body);
-  }
+    return r;
+  for (const auto& line : irc_lines(text))
+    for (const auto& body : utf8_chunks(line, kMaxBody)) {
+      if (!write_line("PRIVMSG " + t + " :" + body))
+        return r;
+      r.sent.push_back(body);
+    }
+  r.complete = !r.sent.empty();
+  return r;
 }
 
 void IrcSession::whois(const std::string& nick)
