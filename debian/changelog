@@ -1,3 +1,9 @@
+partyline (0.2.8-1) unstable; urgency=medium
+
+  * Keep per-server nicks out of the global default.
+
+ -- Greg Gauthier <gmgauthier@protonmail.com>  Fri, 02 Oct 2026 11:36:46 +0100
+
 partyline (0.2.7-1) unstable; urgency=medium
 
   * Retry a refused nick before registration instead of hanging.
