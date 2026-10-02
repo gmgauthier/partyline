@@ -77,6 +77,9 @@ class MainWindow : public Gtk::Window {
                          const Glib::ustring& text);
   void on_session_join(const Glib::ustring& channel, const Glib::ustring& nick, bool me);
   void on_session_part(const Glib::ustring& channel, const Glib::ustring& nick, bool me);
+  void on_session_kick(const Glib::ustring& channel, const Glib::ustring& nick,
+                       const Glib::ustring& by, const Glib::ustring& reason, bool me);
+  void close_channel_view(const Glib::ustring& channel);
   void on_session_quit(const Glib::ustring& nick);
   void on_session_names(const Glib::ustring& channel, const std::vector<Glib::ustring>& nicks);
   void on_session_nick(const Glib::ustring& old_nick, const Glib::ustring& new_nick, bool me);

@@ -426,6 +426,7 @@ void IrcSession::enqueue(Event ev)
   ev.text = utf8_clean(std::move(ev.text));
   ev.channel = utf8_clean(std::move(ev.channel));
   ev.nick = utf8_clean(std::move(ev.nick));
+  ev.by = utf8_clean(std::move(ev.by));
   for (auto& n : ev.nicks)
     n = utf8_clean(std::move(n));
   {
@@ -471,6 +472,9 @@ void IrcSession::on_dispatch()
         break;
       case Event::Part:
         signal_part.emit(ev.channel, ev.nick, ev.me);
+        break;
+      case Event::Kick:
+        signal_kick.emit(ev.channel, ev.nick, ev.by, ev.text, ev.me);
         break;
       case Event::QuitNick:
         signal_quit_nick.emit(ev.nick);
@@ -535,7 +539,7 @@ void IrcSession::handle_line(const std::string& line)
 
   if (cmd == "PING") {
     write_line("PONG " + ping_payload(line));
-    enqueue({Event::Line, line, {}, {}, false, 0, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}, {}});
     return;
   }
 
@@ -544,7 +548,7 @@ void IrcSession::handle_line(const std::string& line)
     const std::string& text = p.params[1];
     std::string ctcp, ctcp_args;
     if (parse_ctcp(text, ctcp, ctcp_args)) {
-      enqueue({Event::Line, line, {}, {}, false, 0, {}});
+      enqueue({Event::Line, line, {}, {}, false, 0, {}, {}});
       if (ctcp == "VERSION") {
         if (!p.nick.empty())
           write_line(std::string("NOTICE ") + p.nick + " :\x01VERSION Partyline " VERSION "\x01");
@@ -559,7 +563,7 @@ void IrcSession::handle_line(const std::string& line)
       /* Other CTCP requests stay on the status line. */
       return;
     }
-    enqueue({Event::Line, line, {}, {}, false, 0, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}, {}});
     Event ev;
     ev.type = Event::Privmsg;
     ev.channel = target;
@@ -574,7 +578,7 @@ void IrcSession::handle_line(const std::string& line)
   if (cmd == "NOTICE" && p.params.size() >= 2 && !p.params[0].empty() &&
       std::string("#&+!").find(p.params[0][0]) != std::string::npos && !p.params[1].empty() &&
       p.params[1][0] != '\x01') {
-    enqueue({Event::Line, line, {}, {}, false, 0, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}, {}});
     Event ev;
     ev.type = Event::Notice;
     ev.channel = p.params[0];
@@ -590,24 +594,37 @@ void IrcSession::handle_line(const std::string& line)
     ev.channel = p.params[0];
     ev.nick = p.nick;
     ev.me = is_me(p.nick);
-    enqueue({Event::Line, line, {}, {}, false, 0, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}, {}});
     enqueue(std::move(ev));
     return;
   }
 
-  if ((cmd == "PART" || cmd == "KICK") && !p.params.empty()) {
+  if (cmd == "KICK" && p.params.size() >= 2) {
+    Event ev;
+    ev.type = Event::Kick;
+    ev.channel = p.params[0];
+    ev.nick = p.params[1];
+    ev.by = p.nick;
+    ev.text = p.params.size() >= 3 ? p.params[2] : std::string();
+    ev.me = is_me(ev.nick);
+    enqueue({Event::Line, line, {}, {}, false, 0, {}, {}});
+    enqueue(std::move(ev));
+    return;
+  }
+
+  if (cmd == "PART" && !p.params.empty()) {
     Event ev;
     ev.type = Event::Part;
     ev.channel = p.params[0];
-    ev.nick = (cmd == "KICK" && p.params.size() >= 2) ? p.params[1] : p.nick;
+    ev.nick = p.nick;
     ev.me = is_me(ev.nick);
-    enqueue({Event::Line, line, {}, {}, false, 0, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}, {}});
     enqueue(std::move(ev));
     return;
   }
 
   if (cmd == "QUIT") {
-    enqueue({Event::Line, line, {}, {}, false, 0, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}, {}});
     Event ev;
     ev.type = Event::QuitNick;
     ev.nick = p.nick;
@@ -625,7 +642,7 @@ void IrcSession::handle_line(const std::string& line)
       std::lock_guard<std::mutex> lock(nick_mu_);
       nick_ = ev.text;
     }
-    enqueue({Event::Line, line, {}, {}, false, 0, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}, {}});
     enqueue(std::move(ev));
     return;
   }
@@ -643,7 +660,7 @@ void IrcSession::handle_line(const std::string& line)
       }
     }
     if (matched) {
-      enqueue({Event::Lag, {}, {}, {}, false, 0, {}});
+      enqueue({Event::Lag, {}, {}, {}, false, 0, {}, {}});
       return;
     }
   }
@@ -656,7 +673,7 @@ void IrcSession::handle_line(const std::string& line)
       names_acc_.clear();
     }
     split_nicks(names, names_acc_);
-    enqueue({Event::Line, line, {}, {}, false, 0, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}, {}});
     return;
   }
 
@@ -667,7 +684,7 @@ void IrcSession::handle_line(const std::string& line)
     ev.nicks = names_acc_;
     names_acc_.clear();
     names_chan_.clear();
-    enqueue({Event::Line, line, {}, {}, false, 0, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}, {}});
     enqueue(std::move(ev));
     return;
   }
@@ -675,13 +692,13 @@ void IrcSession::handle_line(const std::string& line)
   {
     const std::string who = format_whois(cmd, p.params);
     if (!who.empty()) {
-      enqueue({Event::Line, utf8_clean(who), {}, {}, false, 0, {}});
+      enqueue({Event::Line, utf8_clean(who), {}, {}, false, 0, {}, {}});
       return;
     }
   }
 
   if (cmd == "321") {
-    enqueue({Event::ListStart, {}, {}, {}, false, 0, {}});
+    enqueue({Event::ListStart, {}, {}, {}, false, 0, {}, {}});
     return;
   }
   if (cmd == "322" && !p.params.empty()) {
@@ -712,7 +729,7 @@ void IrcSession::handle_line(const std::string& line)
     return;
   }
   if (cmd == "323") {
-    enqueue({Event::ListEnd, {}, {}, {}, false, 0, {}});
+    enqueue({Event::ListEnd, {}, {}, {}, false, 0, {}, {}});
     return;
   }
 
@@ -720,7 +737,7 @@ void IrcSession::handle_line(const std::string& line)
    * connection does not sit unregistered (after 001 a refused /nick just
    * keeps the current nick). */
   if (!registered_ && (cmd == "432" || cmd == "433" || cmd == "436" || cmd == "437")) {
-    enqueue({Event::Line, line, {}, {}, false, 0, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}, {}});
     std::string base;
     {
       std::lock_guard<std::mutex> lock(nick_mu_);
@@ -728,11 +745,11 @@ void IrcSession::handle_line(const std::string& line)
     }
     const std::string next = alternate_nick(base, ++nick_attempts_);
     if (next.empty()) {
-      enqueue({Event::Line, "* No nickname accepted; disconnecting.", {}, {}, false, 0, {}});
+      enqueue({Event::Line, "* No nickname accepted; disconnecting.", {}, {}, false, 0, {}, {}});
       write_line("QUIT :Nickname rejected");
       return;
     }
-    enqueue({Event::Line, "* Nickname rejected; trying " + next, {}, {}, false, 0, {}});
+    enqueue({Event::Line, "* Nickname rejected; trying " + next, {}, {}, false, 0, {}, {}});
     write_line("NICK " + next);
     return;
   }
@@ -743,12 +760,12 @@ void IrcSession::handle_line(const std::string& line)
       std::lock_guard<std::mutex> lock(nick_mu_);
       nick_ = p.params[0];
     }
-    enqueue({Event::Line, line, {}, {}, false, 0, {}});
-    enqueue({Event::Registered, {}, {}, {}, false, 0, {}});
+    enqueue({Event::Line, line, {}, {}, false, 0, {}, {}});
+    enqueue({Event::Registered, {}, {}, {}, false, 0, {}, {}});
     return;
   }
 
-  enqueue({Event::Line, line, {}, {}, false, 0, {}});
+  enqueue({Event::Line, line, {}, {}, false, 0, {}, {}});
   if (cmd == "ERROR") {
     Event ev;
     ev.type = Event::Finished;
@@ -776,6 +793,7 @@ void IrcSession::thread_main()
              {},
              false,
              0,
+             {},
              {}});
 
     /* GIO's per-socket timeout tries every A record; a filtered port on a
@@ -853,7 +871,7 @@ void IrcSession::thread_main()
     sock_.reset();
   }
   running_.store(false);
-  enqueue({Event::Finished, finish, {}, {}, false, 0, {}});
+  enqueue({Event::Finished, finish, {}, {}, false, 0, {}, {}});
 }
 
 }  // namespace partyline

@@ -66,6 +66,8 @@ class IrcSession {
   sigc::signal<void, Glib::ustring, Glib::ustring, Glib::ustring> signal_action;
   sigc::signal<void, Glib::ustring, Glib::ustring, bool> signal_join;
   sigc::signal<void, Glib::ustring, Glib::ustring, bool> signal_part;
+  /** KICK: channel, kicked nick, kicker nick, reason (may be empty), kicked is us. */
+  sigc::signal<void, Glib::ustring, Glib::ustring, Glib::ustring, Glib::ustring, bool> signal_kick;
   sigc::signal<void, Glib::ustring> signal_quit_nick;
   sigc::signal<void, Glib::ustring, std::vector<Glib::ustring>> signal_names;
   sigc::signal<void, Glib::ustring, Glib::ustring, bool> signal_nick;
@@ -85,6 +87,7 @@ class IrcSession {
       Action,
       Join,
       Part,
+      Kick,
       QuitNick,
       Names,
       NickChange,
@@ -99,6 +102,7 @@ class IrcSession {
     bool me = false;
     int users = 0;
     std::vector<std::string> nicks;
+    std::string by;  ///< Kick: who kicked.
   };
 
   void thread_main();

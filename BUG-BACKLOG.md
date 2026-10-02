@@ -6,6 +6,14 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 
 ## Open
 
+None.
+
+## Closed
+
+None.
+
+## Closed
+
 ### Kick is shown as a part, and the reason is dropped
 
 - Severity: incorrect
@@ -13,12 +21,7 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 - Where: `src/irc_session.cpp:466`, `src/main_window.cpp:996`
 - Trigger: Someone is kicked, or you are kicked.
 - Outcome: PART and KICK both become `Event::Part`. The channel line is always `* nick has left <channel>`. The kick reason is dropped. A self-kick uses the same path ("You have left") and closes the channel.
-
-## Closed
-
-None.
-
-## Closed
+- Fixed in v0.2.11: KICK is its own `Event::Kick` / `signal_kick(channel, nick, by, reason, me)`. The channel shows `* nick was kicked by op (reason)`. A self-kick shows `* You were kicked from #c by op (reason)` in the channel log and on Status, then closes the channel as before.
 
 ### Channel and query log names collide
 

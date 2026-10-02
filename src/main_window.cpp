@@ -817,6 +817,7 @@ void MainWindow::on_connect()
   session_->signal_action.connect(sigc::mem_fun(*this, &MainWindow::on_session_action));
   session_->signal_join.connect(sigc::mem_fun(*this, &MainWindow::on_session_join));
   session_->signal_part.connect(sigc::mem_fun(*this, &MainWindow::on_session_part));
+  session_->signal_kick.connect(sigc::mem_fun(*this, &MainWindow::on_session_kick));
   session_->signal_quit_nick.connect(sigc::mem_fun(*this, &MainWindow::on_session_quit));
   session_->signal_names.connect(sigc::mem_fun(*this, &MainWindow::on_session_names));
   session_->signal_nick.connect(sigc::mem_fun(*this, &MainWindow::on_session_nick));
@@ -1008,21 +1009,45 @@ void MainWindow::on_session_part(const Glib::ustring& channel, const Glib::ustri
 {
   if (me) {
     append_channel(channel, "* You have left " + channel);
-    const bool was_current = same_chan(current_channel_, channel);
-    drop_channel(channel);
-    fill_tree_connected();
-    if (was_current && !channels_.empty())
-      show_channel(channels_.back().name);
-    else if (was_current) {
-      select_tree(1, connected_server_id_);
-      show_pane(Pane::Status);
-    } else if (!current_channel_.empty())
-      select_tree(2, connected_server_id_, current_channel_);
+    close_channel_view(channel);
     return;
   }
   if (find_chan(channel)) {
     remove_nick(channel, nick);
     append_channel(channel, "* " + nick + " has left " + channel);
+  }
+}
+
+void MainWindow::close_channel_view(const Glib::ustring& channel)
+{
+  const bool was_current = same_chan(current_channel_, channel);
+  drop_channel(channel);
+  fill_tree_connected();
+  if (was_current && !channels_.empty())
+    show_channel(channels_.back().name);
+  else if (was_current) {
+    select_tree(1, connected_server_id_);
+    show_pane(Pane::Status);
+  } else if (!current_channel_.empty())
+    select_tree(2, connected_server_id_, current_channel_);
+}
+
+void MainWindow::on_session_kick(const Glib::ustring& channel, const Glib::ustring& nick,
+                                 const Glib::ustring& by, const Glib::ustring& reason, bool me)
+{
+  const Glib::ustring why = reason.empty() ? Glib::ustring() : " (" + reason + ")";
+  if (me) {
+    /* The channel closes as on a part; the kick also goes to Status so it
+     * stays visible after the channel buffer is gone. */
+    const Glib::ustring msg = "* You were kicked from " + channel + " by " + by + why;
+    append_channel(channel, msg);
+    append_status(msg);
+    close_channel_view(channel);
+    return;
+  }
+  if (find_chan(channel)) {
+    remove_nick(channel, nick);
+    append_channel(channel, "* " + nick + " was kicked by " + by + why);
   }
 }
 
