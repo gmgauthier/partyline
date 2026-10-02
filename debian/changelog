@@ -1,3 +1,9 @@
+partyline (0.2.6-1) unstable; urgency=medium
+
+  * Show /me actions in the buffer and answer only an exact CTCP VERSION.
+
+ -- Greg Gauthier <gmgauthier@protonmail.com>  Fri, 02 Oct 2026 11:31:48 +0100
+
 partyline (0.2.5-1) unstable; urgency=medium
 
   * Route channel NOTICEs to the channel buffer.
