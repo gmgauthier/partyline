@@ -1,6 +1,6 @@
 # Partyline backlog
 
-Current release: **v0.2.2**. Last updated: 2026-10-02.
+Current release: **v0.2.3**. Last updated: 2026-10-02.
 
 mIRC 5.x / 6. Binary `partyline`. Suite catalog: `lcos-projects/PRODUCT-BACKLOG.md`. Design: `lcos-projects/IRC.md`. Plan: [DEVELOPMENT.md](DEVELOPMENT.md). How to land work: [DEVELOPMENT.md](DEVELOPMENT.md#process) — `feature/` / `fix/` branches, PRs to `master`, lint gate, semver on shipped PRs.
 
@@ -38,6 +38,8 @@ Nothing queued as a next slice. After v1 has been lived with, the first real hol
 - USENET (Pan) or telnet (PuTTY)
 
 ## Shipped
+
+**v0.2.3** — A long message is split into several on character boundaries, and the pane shows only what reached the server.
 
 **v0.2.2** — A line break in a nick, channel, or message can no longer inject a second IRC command.
 

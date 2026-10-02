@@ -1,3 +1,9 @@
+partyline (0.2.3-1) unstable; urgency=medium
+
+  * Split long PRIVMSGs on UTF-8 boundaries and show only what was sent.
+
+ -- Greg Gauthier <gmgauthier@protonmail.com>  Fri, 02 Oct 2026 11:24:32 +0100
+
 partyline (0.2.2-1) unstable; urgency=medium
 
   * Keep CR and LF in user fields from starting a second IRC command.

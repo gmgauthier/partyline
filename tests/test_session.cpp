@@ -66,11 +66,70 @@ void test_line_breaks_never_start_a_second_command()
   s.stop();
 }
 
+bool valid_utf8(const std::string& s)
+{
+  return g_utf8_validate(s.data(), static_cast<gssize>(s.size()), nullptr);
+}
+
+void test_long_privmsg_is_split_on_utf8_boundaries()
+{
+  fake_irc::Server srv;
+  partyline::IrcSession s;
+  s.start("127.0.0.1", srv.port(), false, false, "bob", "Bob");
+  CHECK(fake_irc::pump_until([&]() { return srv.lines().size() >= 2; }));
+
+  /* 'a' then 600 two-byte characters: byte 400 falls inside a character. */
+  std::string text = "a";
+  for (int i = 0; i < 600; ++i)
+    text += "\xc3\xa9";
+  const auto r = s.privmsg("#a", text);
+  CHECK(r.complete);
+  CHECK(r.sent.size() >= 3);
+  std::string joined;
+  for (const auto& piece : r.sent) {
+    CHECK(piece.size() <= 400);
+    CHECK(valid_utf8(piece));
+    joined += piece;
+  }
+  CHECK(joined == text);
+
+  const std::string prefix = "PRIVMSG #a :";
+  CHECK(fake_irc::pump_until([&]() {
+    size_t n = 0;
+    for (const auto& l : srv.lines())
+      if (l.compare(0, prefix.size(), prefix) == 0)
+        ++n;
+    return n >= r.sent.size();
+  }));
+  std::string got;
+  for (const auto& l : srv.lines())
+    if (l.compare(0, prefix.size(), prefix) == 0) {
+      const std::string body = l.substr(prefix.size());
+      CHECK(body.size() <= 400);
+      CHECK(valid_utf8(body));
+      got += body;
+    }
+  CHECK(got == text);
+  if (suite_test::failures)
+    dump(srv);
+  s.stop();
+}
+
+void test_privmsg_without_a_socket_reports_nothing_sent()
+{
+  partyline::IrcSession s;
+  const auto r = s.privmsg("#a", "hello");
+  CHECK(!r.complete);
+  CHECK(r.sent.empty());
+}
+
 }  // namespace
 
 int main()
 {
   Gio::init();
   test_line_breaks_never_start_a_second_command();
+  test_long_privmsg_is_split_on_utf8_boundaries();
+  test_privmsg_without_a_socket_reports_nothing_sent();
   return suite_test::done("session");
 }

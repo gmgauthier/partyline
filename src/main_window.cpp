@@ -719,14 +719,18 @@ void MainWindow::handle_command(const Glib::ustring& line)
       msg = rest.substr(sp2 + 1);
     }
     if (session_ && !target.empty() && !msg.empty()) {
-      session_->privmsg(target.raw(), msg.raw());
-      if (find_chan(target))
-        append_channel(target, "<" + connected_nick_ + "> " + msg);
-      else {
-        const Glib::ustring out = "* -> " + target + ": " + msg;
-        append_status(out);
-        chat_log_.write_query(target.raw(), out.raw());
+      const auto r = session_->privmsg(target.raw(), msg.raw());
+      for (const auto& piece : r.sent) {
+        if (find_chan(target))
+          append_channel(target, "<" + connected_nick_ + "> " + piece);
+        else {
+          const Glib::ustring out = "* -> " + target + ": " + piece;
+          append_status(out);
+          chat_log_.write_query(target.raw(), out.raw());
+        }
       }
+      if (!r.complete)
+        append_status("* message to " + target + " was not sent in full");
     }
   } else if (low == "whois") {
     Glib::ustring nick = rest;
@@ -898,8 +902,11 @@ void MainWindow::on_send()
     show_pane(Pane::Status);
     return;
   }
-  session_->privmsg(current_channel_.raw(), text.raw());
-  append_channel(current_channel_, "<" + connected_nick_ + "> " + text);
+  const auto r = session_->privmsg(current_channel_.raw(), text.raw());
+  for (const auto& piece : r.sent)
+    append_channel(current_channel_, "<" + connected_nick_ + "> " + piece);
+  if (!r.complete)
+    append_channel(current_channel_, "* message was not sent in full");
 }
 
 void MainWindow::on_quit()

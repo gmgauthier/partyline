@@ -6,14 +6,6 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 
 ## Open
 
-### The channel pane shows text the server did not get
-
-- Severity: incorrect
-- Confidence: high
-- Where: `src/irc_session.cpp:285`, `src/main_window.cpp:902`
-- Trigger: Send a PRIVMSG longer than 400 bytes, or a send whose `write_line` fails.
-- Outcome: The body is `resize`d to 400 and sent as one PRIVMSG. There is no further split. `resize(400)` can cut a UTF-8 sequence. The channel pane and the log append the original string. A failed write is ignored by the UI.
-
 ### Lag ping races the socket thread on a std::string
 
 - Severity: crash
@@ -83,6 +75,15 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 None.
 
 ## Closed
+
+### The channel pane shows text the server did not get
+
+- Severity: incorrect
+- Confidence: high
+- Where: `src/irc_session.cpp:285`, `src/main_window.cpp:902`
+- Trigger: Send a PRIVMSG longer than 400 bytes, or a send whose `write_line` fails.
+- Outcome: The body is `resize`d to 400 and sent as one PRIVMSG. There is no further split. `resize(400)` can cut a UTF-8 sequence. The channel pane and the log append the original string. A failed write is ignored by the UI.
+- Fixed in v0.2.3: `privmsg` splits each line into PRIVMSGs of at most 400 bytes, only between UTF-8 characters, stops at the first failed write, and returns the bodies it sent. The channel pane, status line, and log show only those, plus a "not sent in full" line when a write failed.
 
 ### A newline in a nick, channel, or message is a second IRC command
 

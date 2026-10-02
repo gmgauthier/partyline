@@ -34,7 +34,14 @@ class IrcSession {
 
   void join(const std::string& channel);
   void part(const std::string& channel);
-  void privmsg(const std::string& target, const std::string& text);
+  /** What privmsg() put on the wire. */
+  struct SendResult {
+    std::vector<std::string> sent;  ///< Message bodies written, in order.
+    bool complete = false;          ///< Every piece of the text was written.
+  };
+  /** Sends text as PRIVMSGs: one per line, each body at most 400 bytes and
+   *  split only between UTF-8 characters. Stops at the first failed write. */
+  SendResult privmsg(const std::string& target, const std::string& text);
   void quote(const std::string& raw);
   void whois(const std::string& nick);
   void list_channels(const std::string& mask);
