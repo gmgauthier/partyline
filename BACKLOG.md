@@ -1,6 +1,6 @@
 # Partyline backlog
 
-Current release: **v0.2.6**. Last updated: 2026-10-02.
+Current release: **v0.2.7**. Last updated: 2026-10-02.
 
 mIRC 5.x / 6. Binary `partyline`. Suite catalog: `lcos-projects/PRODUCT-BACKLOG.md`. Design: `lcos-projects/IRC.md`. Plan: [DEVELOPMENT.md](DEVELOPMENT.md). How to land work: [DEVELOPMENT.md](DEVELOPMENT.md#process) — `feature/` / `fix/` branches, PRs to `master`, lint gate, semver on shipped PRs.
 
@@ -38,6 +38,8 @@ Nothing queued as a next slice. After v1 has been lived with, the first real hol
 - USENET (Pan) or telnet (PuTTY)
 
 ## Shipped
+
+**v0.2.7** — A nick the server refuses at connect is retried with an alternate instead of leaving the input disabled.
 
 **v0.2.6** — /me actions now show in the channel, and only a real CTCP VERSION is answered.
 

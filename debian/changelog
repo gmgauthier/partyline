@@ -1,3 +1,9 @@
+partyline (0.2.7-1) unstable; urgency=medium
+
+  * Retry a refused nick before registration instead of hanging.
+
+ -- Greg Gauthier <gmgauthier@protonmail.com>  Fri, 02 Oct 2026 11:34:23 +0100
+
 partyline (0.2.6-1) unstable; urgency=medium
 
   * Show /me actions in the buffer and answer only an exact CTCP VERSION.
