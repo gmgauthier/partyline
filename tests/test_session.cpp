@@ -156,6 +156,36 @@ void test_lag_ping_while_pongs_arrive()
   s.stop();
 }
 
+struct Said {
+  std::string target, nick, text;
+};
+
+void test_channel_notice_reaches_the_channel()
+{
+  fake_irc::Server srv;
+  partyline::IrcSession s;
+  std::vector<Said> notices;
+  s.signal_notice.connect(
+      [&](const Glib::ustring& t, const Glib::ustring& n, const Glib::ustring& x) {
+        notices.push_back({t.raw(), n.raw(), x.raw()});
+      });
+  s.start("127.0.0.1", srv.port(), false, false, "bob", "Bob");
+  CHECK(fake_irc::pump_until([&]() { return srv.lines().size() >= 2; }));
+  srv.send(":al!a@h NOTICE bob :just for you");
+  srv.send(":al!a@h NOTICE #chan :hello channel");
+  srv.send(":al!a@h NOTICE &local :hi local");
+  CHECK(fake_irc::pump_until([&]() { return notices.size() >= 2; }));
+  fake_irc::pump_until([]() { return false; }, 100);
+  CHECK(notices.size() == 2);
+  if (notices.size() == 2) {
+    CHECK(notices[0].target == "#chan");
+    CHECK(notices[0].nick == "al");
+    CHECK(notices[0].text == "hello channel");
+    CHECK(notices[1].target == "&local");
+  }
+  s.stop();
+}
+
 }  // namespace
 
 int main()
@@ -165,5 +195,6 @@ int main()
   test_long_privmsg_is_split_on_utf8_boundaries();
   test_privmsg_without_a_socket_reports_nothing_sent();
   test_lag_ping_while_pongs_arrive();
+  test_channel_notice_reaches_the_channel();
   return suite_test::done("session");
 }

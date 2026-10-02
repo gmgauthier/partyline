@@ -60,6 +60,8 @@ class IrcSession {
   sigc::signal<void> signal_registered;
   sigc::signal<void, Glib::ustring> signal_finished;
   sigc::signal<void, Glib::ustring, Glib::ustring, Glib::ustring> signal_privmsg;
+  /** A NOTICE to a channel: channel, sender nick, text. */
+  sigc::signal<void, Glib::ustring, Glib::ustring, Glib::ustring> signal_notice;
   sigc::signal<void, Glib::ustring, Glib::ustring, bool> signal_join;
   sigc::signal<void, Glib::ustring, Glib::ustring, bool> signal_part;
   sigc::signal<void, Glib::ustring> signal_quit_nick;
@@ -77,6 +79,7 @@ class IrcSession {
       Registered,
       Finished,
       Privmsg,
+      Notice,
       Join,
       Part,
       QuitNick,

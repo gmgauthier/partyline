@@ -434,6 +434,9 @@ void IrcSession::on_dispatch()
       case Event::Privmsg:
         signal_privmsg.emit(ev.channel, ev.nick, ev.text);
         break;
+      case Event::Notice:
+        signal_notice.emit(ev.channel, ev.nick, ev.text);
+        break;
       case Event::Join:
         signal_join.emit(ev.channel, ev.nick, ev.me);
         break;
@@ -526,6 +529,21 @@ void IrcSession::handle_line(const std::string& line)
     ev.channel = target;
     ev.nick = p.nick;
     ev.text = text;
+    enqueue(std::move(ev));
+    return;
+  }
+
+  /* A NOTICE to a channel goes to that channel's buffer. A NOTICE to us
+   * (server or user) and CTCP replies stay on the status line. */
+  if (cmd == "NOTICE" && p.params.size() >= 2 && !p.params[0].empty() &&
+      std::string("#&+!").find(p.params[0][0]) != std::string::npos && !p.params[1].empty() &&
+      p.params[1][0] != '\x01') {
+    enqueue({Event::Line, line, {}, {}, false, 0, {}});
+    Event ev;
+    ev.type = Event::Notice;
+    ev.channel = p.params[0];
+    ev.nick = p.nick;
+    ev.text = p.params[1];
     enqueue(std::move(ev));
     return;
   }

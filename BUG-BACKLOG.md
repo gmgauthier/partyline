@@ -6,14 +6,6 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 
 ## Open
 
-### Channel NOTICE never reaches the channel buffer
-
-- Severity: incorrect
-- Confidence: high
-- Where: `src/irc_session.cpp:432`
-- Trigger: The server sends a channel `NOTICE`.
-- Outcome: Only `PRIVMSG` builds `Event::Privmsg`. A channel NOTICE falls through to the status line. `DEVELOPMENT.md` says an incoming NOTICE goes to the channel or query buffer. A query PRIVMSG shown on Status is intentional. A channel NOTICE is not.
-
 ### ACTION and other CTCP stay on the status line
 
 - Severity: incorrect
@@ -67,6 +59,15 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 None.
 
 ## Closed
+
+### Channel NOTICE never reaches the channel buffer
+
+- Severity: incorrect
+- Confidence: high
+- Where: `src/irc_session.cpp:432`
+- Trigger: The server sends a channel `NOTICE`.
+- Outcome: Only `PRIVMSG` builds `Event::Privmsg`. A channel NOTICE falls through to the status line. `DEVELOPMENT.md` says an incoming NOTICE goes to the channel or query buffer. A query PRIVMSG shown on Status is intentional. A channel NOTICE is not.
+- Fixed in v0.2.5: A NOTICE whose target starts with `#`, `&`, `+`, or `!` (and is not a CTCP reply) becomes a new `Event::Notice` / `signal_notice`, and the window appends `-nick- text` to that channel. NOTICEs to you still go to Status.
 
 ### Lag ping races the socket thread on a std::string
 
