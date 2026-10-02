@@ -6,14 +6,6 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 
 ## Open
 
-### A rejected nick leaves the input disabled
-
-- Severity: incorrect
-- Confidence: high
-- Where: `src/main_window.cpp:540`, `src/main_window.cpp:919`, `src/irc_session.cpp:580`
-- Trigger: Connect with a nick the server rejects (numeric 433) and the socket stays open waiting for another NICK. Nothing in `src/` handles 433.
-- Outcome: `registered_` is set only from numeric 001. The input, Send, Join, and channel list stay insensitive until then. Status shows the numeric. `/nick` cannot be sent. Disconnect is the control that still works.
-
 ### Connect and /nick overwrite the global nick with a per-server nick
 
 - Severity: data-loss
@@ -51,6 +43,15 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 None.
 
 ## Closed
+
+### A rejected nick leaves the input disabled
+
+- Severity: incorrect
+- Confidence: high
+- Where: `src/main_window.cpp:540`, `src/main_window.cpp:919`, `src/irc_session.cpp:580`
+- Trigger: Connect with a nick the server rejects (numeric 433) and the socket stays open waiting for another NICK. Nothing in `src/` handles 433.
+- Outcome: `registered_` is set only from numeric 001. The input, Send, Join, and channel list stay insensitive until then. Status shows the numeric. `/nick` cannot be sent. Disconnect is the control that still works.
+- Fixed in v0.2.7: A 432, 433, 436, or 437 before 001 makes `IrcSession` try an alternate nick (`nick_`, `nick__`, `nick___`, then the nick cut to 7 bytes plus 1 through 6). After nine refusals it sends `QUIT :Nickname rejected`, so the connection ends instead of hanging. A refused `/nick` after registration keeps the current nick.
 
 ### ACTION and other CTCP stay on the status line
 

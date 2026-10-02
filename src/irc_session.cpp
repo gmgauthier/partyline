@@ -231,6 +231,19 @@ std::vector<std::string> irc_lines(const std::string& text)
   return out;
 }
 
+/* Nick to try after the server refused `attempt` nicks: base_, base__,
+ * base___, then base1..base6 (the base cut to 7 bytes, in case length was
+ * the problem). Empty when out of alternates. */
+std::string alternate_nick(const std::string& base, int attempt)
+{
+  const std::string b = base.empty() ? std::string("partyline") : base;
+  if (attempt <= 3)
+    return b + std::string(static_cast<size_t>(attempt), '_');
+  if (attempt <= 9)
+    return b.substr(0, 7) + std::to_string(attempt - 3);
+  return {};
+}
+
 /* Longest PRIVMSG body sent in one line, in bytes. */
 constexpr size_t kMaxBody = 400;
 
@@ -284,10 +297,13 @@ void IrcSession::start(std::string host, guint16 port, bool tls, bool tls_verify
   {
     std::lock_guard<std::mutex> lock(nick_mu_);
     nick_ = irc_token(nick);
+    base_nick_ = nick_;
     realname_ = realname.empty() ? nick_ : irc_text(std::move(realname));
   }
   names_acc_.clear();
   names_chan_.clear();
+  registered_ = false;
+  nick_attempts_ = 0;
   cancellable_ = Gio::Cancellable::create();
   running_.store(true);
   thread_ = std::thread(&IrcSession::thread_main, this);
@@ -700,7 +716,29 @@ void IrcSession::handle_line(const std::string& line)
     return;
   }
 
+  /* The nick was refused before registration: try an alternate so the
+   * connection does not sit unregistered (after 001 a refused /nick just
+   * keeps the current nick). */
+  if (!registered_ && (cmd == "432" || cmd == "433" || cmd == "436" || cmd == "437")) {
+    enqueue({Event::Line, line, {}, {}, false, 0, {}});
+    std::string base;
+    {
+      std::lock_guard<std::mutex> lock(nick_mu_);
+      base = base_nick_;
+    }
+    const std::string next = alternate_nick(base, ++nick_attempts_);
+    if (next.empty()) {
+      enqueue({Event::Line, "* No nickname accepted; disconnecting.", {}, {}, false, 0, {}});
+      write_line("QUIT :Nickname rejected");
+      return;
+    }
+    enqueue({Event::Line, "* Nickname rejected; trying " + next, {}, {}, false, 0, {}});
+    write_line("NICK " + next);
+    return;
+  }
+
   if (cmd == "001") {
+    registered_ = true;
     if (!p.params.empty()) {
       std::lock_guard<std::mutex> lock(nick_mu_);
       nick_ = p.params[0];
