@@ -68,9 +68,19 @@ std::string ping_payload(const std::string& line)
   return s;
 }
 
-bool is_ctcp_version(const std::string& text)
+/* Splits a CTCP message (\x01COMMAND args\x01, closing \x01 optional)
+ * into command and args. Returns false when text is not CTCP. */
+bool parse_ctcp(const std::string& text, std::string& command, std::string& args)
 {
-  return text.compare(0, 8, "\x01VERSION") == 0;
+  if (text.empty() || text[0] != '\x01')
+    return false;
+  std::string body = text.substr(1);
+  if (!body.empty() && body.back() == '\x01')
+    body.pop_back();
+  const auto sp = body.find(' ');
+  command = body.substr(0, sp);
+  args = sp == std::string::npos ? std::string() : body.substr(sp + 1);
+  return true;
 }
 
 std::string strip_irc_format(const std::string& in)
@@ -437,6 +447,9 @@ void IrcSession::on_dispatch()
       case Event::Notice:
         signal_notice.emit(ev.channel, ev.nick, ev.text);
         break;
+      case Event::Action:
+        signal_action.emit(ev.channel, ev.nick, ev.text);
+        break;
       case Event::Join:
         signal_join.emit(ev.channel, ev.nick, ev.me);
         break;
@@ -513,14 +526,21 @@ void IrcSession::handle_line(const std::string& line)
   if (cmd == "PRIVMSG" && p.params.size() >= 2) {
     const std::string& target = p.params[0];
     const std::string& text = p.params[1];
-    if (is_ctcp_version(text)) {
-      if (!p.nick.empty())
-        write_line(std::string("NOTICE ") + p.nick + " :\x01VERSION Partyline " VERSION "\x01");
+    std::string ctcp, ctcp_args;
+    if (parse_ctcp(text, ctcp, ctcp_args)) {
       enqueue({Event::Line, line, {}, {}, false, 0, {}});
-      return;
-    }
-    if (!text.empty() && text[0] == '\x01') {
-      enqueue({Event::Line, line, {}, {}, false, 0, {}});
+      if (ctcp == "VERSION") {
+        if (!p.nick.empty())
+          write_line(std::string("NOTICE ") + p.nick + " :\x01VERSION Partyline " VERSION "\x01");
+      } else if (ctcp == "ACTION") {
+        Event ev;
+        ev.type = Event::Action;
+        ev.channel = target;
+        ev.nick = p.nick;
+        ev.text = ctcp_args;
+        enqueue(std::move(ev));
+      }
+      /* Other CTCP requests stay on the status line. */
       return;
     }
     enqueue({Event::Line, line, {}, {}, false, 0, {}});

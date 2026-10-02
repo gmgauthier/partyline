@@ -62,6 +62,8 @@ class IrcSession {
   sigc::signal<void, Glib::ustring, Glib::ustring, Glib::ustring> signal_privmsg;
   /** A NOTICE to a channel: channel, sender nick, text. */
   sigc::signal<void, Glib::ustring, Glib::ustring, Glib::ustring> signal_notice;
+  /** A CTCP ACTION (/me): target (channel or our nick), sender nick, text. */
+  sigc::signal<void, Glib::ustring, Glib::ustring, Glib::ustring> signal_action;
   sigc::signal<void, Glib::ustring, Glib::ustring, bool> signal_join;
   sigc::signal<void, Glib::ustring, Glib::ustring, bool> signal_part;
   sigc::signal<void, Glib::ustring> signal_quit_nick;
@@ -80,6 +82,7 @@ class IrcSession {
       Finished,
       Privmsg,
       Notice,
+      Action,
       Join,
       Part,
       QuitNick,

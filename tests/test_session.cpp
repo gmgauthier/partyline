@@ -186,6 +186,50 @@ void test_channel_notice_reaches_the_channel()
   s.stop();
 }
 
+void test_action_reaches_the_buffer_and_version_is_exact()
+{
+  fake_irc::Server srv;
+  partyline::IrcSession s;
+  std::vector<Said> actions;
+  std::vector<Said> msgs;
+  s.signal_action.connect(
+      [&](const Glib::ustring& t, const Glib::ustring& n, const Glib::ustring& x) {
+        actions.push_back({t.raw(), n.raw(), x.raw()});
+      });
+  s.signal_privmsg.connect(
+      [&](const Glib::ustring& t, const Glib::ustring& n, const Glib::ustring& x) {
+        msgs.push_back({t.raw(), n.raw(), x.raw()});
+      });
+  s.start("127.0.0.1", srv.port(), false, false, "bob", "Bob");
+  CHECK(fake_irc::pump_until([&]() { return srv.lines().size() >= 2; }));
+  srv.send(
+      ":al!a@h PRIVMSG #chan :\x01"
+      "ACTION waves\x01");
+  srv.send(
+      ":al!a@h PRIVMSG bob :\x01"
+      "ACTION nods\x01");
+  srv.send(":al!a@h PRIVMSG bob :\x01VERSIONX\x01");
+  srv.send(":al!a@h PRIVMSG bob :\x01PING 123\x01");
+  srv.send(":cy!c@h PRIVMSG bob :\x01VERSION\x01");
+  CHECK(fake_irc::pump_until([&]() { return actions.size() >= 2; }));
+  CHECK(fake_irc::pump_until([&]() { return any_line_starts(srv, "NOTICE cy "); }));
+  fake_irc::pump_until([]() { return false; }, 100);
+  CHECK(actions.size() == 2);
+  if (actions.size() == 2) {
+    CHECK(actions[0].target == "#chan");
+    CHECK(actions[0].nick == "al");
+    CHECK(actions[0].text == "waves");
+    CHECK(actions[1].target == "bob");
+    CHECK(actions[1].text == "nods");
+  }
+  CHECK(msgs.empty());
+  /* Only the real VERSION query is answered. */
+  CHECK(!any_line_starts(srv, "NOTICE al "));
+  if (suite_test::failures)
+    dump(srv);
+  s.stop();
+}
+
 }  // namespace
 
 int main()
@@ -196,5 +240,6 @@ int main()
   test_privmsg_without_a_socket_reports_nothing_sent();
   test_lag_ping_while_pongs_arrive();
   test_channel_notice_reaches_the_channel();
+  test_action_reaches_the_buffer_and_version_is_exact();
   return suite_test::done("session");
 }

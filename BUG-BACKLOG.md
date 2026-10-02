@@ -6,14 +6,6 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 
 ## Open
 
-### ACTION and other CTCP stay on the status line
-
-- Severity: incorrect
-- Confidence: high
-- Where: `src/irc_session.cpp:435`, `src/irc_session.cpp:441`
-- Trigger: Someone sends a normal `/me` (`\x01ACTION waves\x01`). Or a CTCP whose command merely starts with `VERSION`.
-- Outcome: After the VERSION prefix check, any text whose first byte is `\x01` is enqueued as a status line and returned. It never hits the channel buffer. `is_ctcp_version` is a prefix compare, so a CTCP that starts with `VERSION` is answered as a version query.
-
 ### A rejected nick leaves the input disabled
 
 - Severity: incorrect
@@ -59,6 +51,15 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 None.
 
 ## Closed
+
+### ACTION and other CTCP stay on the status line
+
+- Severity: incorrect
+- Confidence: high
+- Where: `src/irc_session.cpp:435`, `src/irc_session.cpp:441`
+- Trigger: Someone sends a normal `/me` (`\x01ACTION waves\x01`). Or a CTCP whose command merely starts with `VERSION`.
+- Outcome: After the VERSION prefix check, any text whose first byte is `\x01` is enqueued as a status line and returned. It never hits the channel buffer. `is_ctcp_version` is a prefix compare, so a CTCP that starts with `VERSION` is answered as a version query.
+- Fixed in v0.2.6: CTCP is parsed into command and arguments. `ACTION` becomes `signal_action` and is shown as `* nick text` in the channel (or on Status plus the query log when sent to you). Only an exact `VERSION` command is answered. Other CTCP stays on Status.
 
 ### Channel NOTICE never reaches the channel buffer
 
