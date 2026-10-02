@@ -7,6 +7,8 @@
 #include <giomm.h>
 
 #include <algorithm>
+#include <thread>
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -123,6 +125,37 @@ void test_privmsg_without_a_socket_reports_nothing_sent()
   CHECK(r.sent.empty());
 }
 
+/* The UI thread sends lag pings while the socket thread matches PONGs.
+ * Run under -Db_sanitize=thread this reports a data race unless the lag
+ * token and send time are locked. */
+void test_lag_ping_while_pongs_arrive()
+{
+  fake_irc::Server srv;
+  partyline::IrcSession s;
+  s.start("127.0.0.1", srv.port(), false, false, "bob", "Bob");
+  CHECK(fake_irc::pump_until([&]() { return srv.lines().size() >= 2; }));
+
+  std::atomic<bool> done{false};
+  std::thread ponger([&]() {
+    size_t seen = 0;
+    while (!done.load()) {
+      const auto l = srv.lines();
+      for (; seen < l.size(); ++seen)
+        if (l[seen].compare(0, 6, "PING :") == 0)
+          srv.send(":srv PONG srv :" + l[seen].substr(6));
+      g_usleep(200);
+    }
+  });
+  for (int i = 0; i < 300; ++i) {
+    s.send_lag_ping();
+    g_usleep(500);
+  }
+  CHECK(fake_irc::pump_until([&]() { return s.lag_ms() >= 0; }));
+  done.store(true);
+  ponger.join();
+  s.stop();
+}
+
 }  // namespace
 
 int main()
@@ -131,5 +164,6 @@ int main()
   test_line_breaks_never_start_a_second_command();
   test_long_privmsg_is_split_on_utf8_boundaries();
   test_privmsg_without_a_socket_reports_nothing_sent();
+  test_lag_ping_while_pongs_arrive();
   return suite_test::done("session");
 }
