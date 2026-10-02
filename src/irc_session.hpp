@@ -113,6 +113,10 @@ class IrcSession {
   bool tls_ = true;
   bool tls_verify_ = true;
   std::string nick_;
+  std::string base_nick_;  ///< Nick asked for at start(); retries derive from it.
+  /* Socket thread only after start(). */
+  bool registered_ = false;
+  int nick_attempts_ = 0;
   std::string realname_;
   mutable std::mutex nick_mu_;
 

@@ -230,6 +230,67 @@ void test_action_reaches_the_buffer_and_version_is_exact()
   s.stop();
 }
 
+size_t count_starts(fake_irc::Server& srv, const std::string& prefix)
+{
+  size_t n = 0;
+  for (const auto& l : srv.lines())
+    if (l.compare(0, prefix.size(), prefix) == 0)
+      ++n;
+  return n;
+}
+
+void test_rejected_nick_is_retried_until_registered()
+{
+  fake_irc::Server srv;
+  partyline::IrcSession s;
+  bool registered = false;
+  s.signal_registered.connect([&]() { registered = true; });
+  s.start("127.0.0.1", srv.port(), false, false, "bob", "Bob");
+  CHECK(fake_irc::pump_until([&]() { return srv.lines().size() >= 2; }));
+  srv.send(":srv 433 * bob :Nickname is already in use");
+  CHECK(fake_irc::pump_until([&]() { return has_line(srv, "NICK bob_"); }));
+  srv.send(":srv 432 * bob_ :Erroneous nickname");
+  CHECK(fake_irc::pump_until([&]() { return has_line(srv, "NICK bob__"); }));
+  srv.send(":srv 001 bob__ :Welcome");
+  CHECK(fake_irc::pump_until([&]() { return registered; }));
+  CHECK(s.nick() == "bob__");
+
+  /* After registration a rejected /nick keeps the current nick. */
+  const size_t before = count_starts(srv, "NICK ");
+  s.change_nick("al");
+  CHECK(fake_irc::pump_until([&]() { return has_line(srv, "NICK al"); }));
+  srv.send(":srv 433 bob__ al :Nickname is already in use");
+  fake_irc::pump_until([]() { return false; }, 150);
+  CHECK(count_starts(srv, "NICK ") == before + 1);
+  CHECK(s.nick() == "bob__");
+  if (suite_test::failures)
+    dump(srv);
+  s.stop();
+}
+
+void test_nick_retry_gives_up()
+{
+  fake_irc::Server srv;
+  partyline::IrcSession s;
+  s.start("127.0.0.1", srv.port(), false, false, "bob", "Bob");
+  CHECK(fake_irc::pump_until([&]() { return srv.lines().size() >= 2; }));
+  for (int i = 0; i < 20; ++i) {
+    const size_t sent = count_starts(srv, "NICK ");
+    srv.send(":srv 433 * x :Nickname is already in use");
+    if (!fake_irc::pump_until(
+            [&]() {
+              return count_starts(srv, "NICK ") > sent || has_line(srv, "QUIT :Nickname rejected");
+            },
+            500))
+      break;
+    if (has_line(srv, "QUIT :Nickname rejected"))
+      break;
+  }
+  CHECK(has_line(srv, "QUIT :Nickname rejected"));
+  CHECK(count_starts(srv, "NICK ") <= 10);
+  s.stop();
+}
+
 }  // namespace
 
 int main()
@@ -241,5 +302,7 @@ int main()
   test_lag_ping_while_pongs_arrive();
   test_channel_notice_reaches_the_channel();
   test_action_reaches_the_buffer_and_version_is_exact();
+  test_rejected_nick_is_retried_until_registered();
+  test_nick_retry_gives_up();
   return suite_test::done("session");
 }
