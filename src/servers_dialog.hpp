@@ -19,10 +19,11 @@ class ServersDialog : public Gtk::Dialog {
   void on_add_server();
   void on_remove_server();
   void on_ok();
-  void unique_id(Server& s);
 
   Settings& settings_;
   std::vector<Server> working_;
+  /* settings_.last_server, following renames until OK. */
+  std::string last_server_;
   int current_ = -1;
 
   Gtk::Box body_{Gtk::ORIENTATION_HORIZONTAL, 8};

@@ -189,6 +189,28 @@ void Settings::remember_nick(const std::string& server_id, const std::string& ne
     nick = new_nick;
 }
 
+void Settings::assign_id(std::vector<Server>& servers, size_t index, std::string& tracked_id)
+{
+  if (index >= servers.size())
+    return;
+  Server& s = servers[index];
+  const std::string base = make_id(s.name.empty() ? s.host : s.name);
+  std::string id = base;
+  int n = 2;
+  auto taken = [&](const std::string& cand) {
+    for (size_t i = 0; i < servers.size(); ++i) {
+      if (i != index && servers[i].id == cand)
+        return true;
+    }
+    return false;
+  };
+  while (taken(id))
+    id = base + "_" + std::to_string(n++);
+  if (!s.id.empty() && s.id == tracked_id)
+    tracked_id = id;
+  s.id = id;
+}
+
 void Settings::load()
 {
   if (nick.empty())

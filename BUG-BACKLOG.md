@@ -6,14 +6,6 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 
 ## Open
 
-### Renaming a server leaves last-server pointing at the old id
-
-- Severity: incorrect
-- Confidence: high
-- Where: `src/servers_dialog.cpp:156`, `src/servers_dialog.cpp:208`, `src/main_window.cpp:769`
-- Trigger: Rename a server so `Settings::make_id(name)` changes, with that server selected as the last server. Connect.
-- Outcome: `store_row` always recomputes `id` from the name. `on_ok` saves the nick and the server list and does not rewrite `last_server`. `find_id` misses. Connect uses the first server in the list.
-
 ### Channel and query log names collide
 
 - Severity: data-loss
@@ -35,6 +27,15 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 None.
 
 ## Closed
+
+### Renaming a server leaves last-server pointing at the old id
+
+- Severity: incorrect
+- Confidence: high
+- Where: `src/servers_dialog.cpp:156`, `src/servers_dialog.cpp:208`, `src/main_window.cpp:769`
+- Trigger: Rename a server so `Settings::make_id(name)` changes, with that server selected as the last server. Connect.
+- Outcome: `store_row` always recomputes `id` from the name. `on_ok` saves the nick and the server list and does not rewrite `last_server`. `find_id` misses. Connect uses the first server in the list.
+- Fixed in v0.2.9: Id assignment moved to `Settings::assign_id`, which moves a tracked id along with the server it renames. The Servers dialog tracks `last_server` that way and saves it on OK.
 
 ### Connect and /nick overwrite the global nick with a per-server nick
 

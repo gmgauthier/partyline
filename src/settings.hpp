@@ -37,6 +37,10 @@ struct Settings {
    *  nick. An empty nick is ignored. */
   void remember_nick(const std::string& server_id, const std::string& new_nick);
   static std::string make_id(const std::string& name);
+  /** Recomputes servers[index].id from its name (or host), unique within
+   *  servers. If the old id was tracked_id (e.g. last_server), tracked_id
+   *  follows the server to its new id. */
+  static void assign_id(std::vector<Server>& servers, size_t index, std::string& tracked_id);
   static std::string default_nick();
 };
 
