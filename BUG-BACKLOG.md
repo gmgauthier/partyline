@@ -2,17 +2,9 @@
 
 Reviewed 2026-10-01 against the 0.2.0 sources.
 
-`meson test` runs `tests/test_log.cpp` (`log`), `tests/test_settings.cpp` (`settings`), and `tests/test_session.cpp` (`session`, an `IrcSession` against a one-client fake server on 127.0.0.1 from `tests/fake_irc.hpp`). It checks that a log written before `set_host` is dropped, that the host directory is lowercased, and that a leaf such as `../../tmp-escape` stays inside the host directory as `.._.._tmp-escape.txt`. It does not treat two different channel names collapsing to one file as correct. `/quote` is the intentional raw-command path and is not a defect. `session` checks that a CR or LF in a nick, real name, channel, mask, target, message, or `/quote` never reaches the socket as a second command.
+`meson test` runs `tests/test_log.cpp` (`log`), `tests/test_settings.cpp` (`settings`), and `tests/test_session.cpp` (`session`, an `IrcSession` against a one-client fake server on 127.0.0.1 from `tests/fake_irc.hpp`). It checks that a log written before `set_host` is dropped, that the host directory is lowercased, that a leaf such as `../../tmp-escape` stays inside the host directory as `..%2f..%2ftmp-escape.txt`, and that different channel or nick names (`#c++` and `#c__`, `foo~bar` and `foo_bar`) get different files. `/quote` is the intentional raw-command path and is not a defect. `session` checks that a CR or LF in a nick, real name, channel, mask, target, message, or `/quote` never reaches the socket as a second command.
 
 ## Open
-
-### Channel and query log names collide
-
-- Severity: data-loss
-- Confidence: high
-- Where: `src/log.cpp:21`
-- Trigger: Join `#c++` and `#c__` on the same host, or query `foo~bar` and `foo_bar`. Leave and rejoin.
-- Outcome: `safe_leaf` keeps only ASCII alnum, `.`, `-`, `_`, and `#`, then lowercases. Everything else becomes `_`. `#c++` and `#c__` are both `#c__.txt`. The two nicks are both `foo_bar.txt`. Rejoin replays the other conversation (the last 500 lines). The leaf stays inside the host directory. This is a collision, not a path escape.
 
 ### Kick is shown as a part, and the reason is dropped
 
@@ -27,6 +19,15 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 None.
 
 ## Closed
+
+### Channel and query log names collide
+
+- Severity: data-loss
+- Confidence: high
+- Where: `src/log.cpp:21`
+- Trigger: Join `#c++` and `#c__` on the same host, or query `foo~bar` and `foo_bar`. Leave and rejoin.
+- Outcome: `safe_leaf` keeps only ASCII alnum, `.`, `-`, `_`, and `#`, then lowercases. Everything else becomes `_`. `#c++` and `#c__` are both `#c__.txt`. The two nicks are both `foo_bar.txt`. Rejoin replays the other conversation (the last 500 lines). The leaf stays inside the host directory. This is a collision, not a path escape.
+- Fixed in v0.2.10: Channel and query log names now %xx-escape every byte outside letters, digits, `.`, `-`, `_` (and `#` for channels), `%` included, so different names never share a file. Names made only of those characters keep their existing file. Older logs for names with other characters stay on disk under the old name.
 
 ### Renaming a server leaves last-server pointing at the old id
 
