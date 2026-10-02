@@ -1,7 +1,7 @@
 project(
   'partyline',
   'cpp',
-  version: '0.2.1',
+  version: '0.2.2',
   license: 'Unlicense',
   meson_version: '>=0.56',
   default_options: [
@@ -80,3 +80,12 @@ partyline_tests = executable(
   dependencies: [gtkmm],
 )
 test('log', partyline_tests)
+
+session_tests = executable(
+  'partyline-session-tests',
+  'tests/test_session.cpp',
+  'src/irc_session.cpp',
+  include_directories: inc,
+  dependencies: [gtkmm, dependency('threads')],
+)
+test('session', session_tests, timeout: 60)

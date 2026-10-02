@@ -186,6 +186,40 @@ void split_nicks(const std::string& names, std::vector<std::string>& out)
   }
 }
 
+/* A middle parameter (nick, channel, mask): it ends at the first space, CR,
+ * LF, or NUL, so nothing after it can become another parameter or command. */
+std::string irc_token(const std::string& in)
+{
+  const auto end = in.find_first_of(std::string(" \r\n\0", 4));
+  return end == std::string::npos ? in : in.substr(0, end);
+}
+
+/* A trailing parameter (real name): CR, LF, and NUL become spaces. */
+std::string irc_text(std::string in)
+{
+  for (char& c : in)
+    if (c == '\r' || c == '\n' || c == '\0')
+      c = ' ';
+  return in;
+}
+
+/* Message text split on line breaks; each non-empty line is its own message. */
+std::vector<std::string> irc_lines(const std::string& text)
+{
+  std::vector<std::string> out;
+  size_t i = 0;
+  while (i <= text.size()) {
+    const auto end = text.find_first_of(std::string("\r\n\0", 3), i);
+    const std::string part = text.substr(i, end == std::string::npos ? std::string::npos : end - i);
+    if (!part.empty())
+      out.push_back(part);
+    if (end == std::string::npos)
+      break;
+    i = end + 1;
+  }
+  return out;
+}
+
 }  // namespace
 
 IrcSession::IrcSession()
@@ -214,8 +248,8 @@ void IrcSession::start(std::string host, guint16 port, bool tls, bool tls_verify
   tls_verify_ = tls_verify;
   {
     std::lock_guard<std::mutex> lock(nick_mu_);
-    nick_ = std::move(nick);
-    realname_ = realname.empty() ? nick_ : std::move(realname);
+    nick_ = irc_token(nick);
+    realname_ = realname.empty() ? nick_ : irc_text(std::move(realname));
   }
   names_acc_.clear();
   names_chan_.clear();
@@ -266,39 +300,45 @@ void IrcSession::stop()
 
 void IrcSession::join(const std::string& channel)
 {
-  if (!channel.empty())
-    write_line("JOIN " + channel);
+  const std::string c = irc_token(channel);
+  if (!c.empty())
+    write_line("JOIN " + c);
 }
 
 void IrcSession::part(const std::string& channel)
 {
-  if (!channel.empty())
-    write_line("PART " + channel);
+  const std::string c = irc_token(channel);
+  if (!c.empty())
+    write_line("PART " + c);
 }
 
 void IrcSession::privmsg(const std::string& target, const std::string& text)
 {
-  if (target.empty() || text.empty())
+  const std::string t = irc_token(target);
+  if (t.empty() || text.empty())
     return;
-  std::string body = text;
-  if (body.size() > 400)
-    body.resize(400);
-  write_line("PRIVMSG " + target + " :" + body);
+  for (auto body : irc_lines(text)) {
+    if (body.size() > 400)
+      body.resize(400);
+    write_line("PRIVMSG " + t + " :" + body);
+  }
 }
 
 void IrcSession::whois(const std::string& nick)
 {
-  if (nick.empty())
+  const std::string n = irc_token(nick);
+  if (n.empty())
     return;
-  write_line("WHOIS " + nick);
+  write_line("WHOIS " + n);
 }
 
 void IrcSession::list_channels(const std::string& mask)
 {
-  if (mask.empty())
+  const std::string m = irc_token(mask);
+  if (m.empty())
     write_line("LIST");
   else
-    write_line("LIST " + mask);
+    write_line("LIST " + m);
 }
 
 void IrcSession::quote(const std::string& raw)
@@ -309,8 +349,9 @@ void IrcSession::quote(const std::string& raw)
 
 void IrcSession::change_nick(const std::string& nick)
 {
-  if (!nick.empty())
-    write_line("NICK " + nick);
+  const std::string n = irc_token(nick);
+  if (!n.empty())
+    write_line("NICK " + n);
 }
 
 void IrcSession::send_lag_ping()
@@ -401,9 +442,12 @@ bool IrcSession::write_line(const std::string& line)
   if (!out_)
     return false;
   try {
-    std::string wire = line;
-    if (wire.size() < 2 || wire.substr(wire.size() - 2) != "\r\n")
-      wire += "\r\n";
+    /* One call is one command: anything after a CR, LF, or NUL is dropped
+     * (this also covers /quote). */
+    std::string wire = line.substr(0, line.find_first_of(std::string("\r\n\0", 3)));
+    if (wire.empty())
+      return false;
+    wire += "\r\n";
     gsize n = 0;
     out_->write_all(wire.data(), wire.size(), n, cancellable_);
     return n == wire.size();
