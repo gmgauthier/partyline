@@ -1,3 +1,9 @@
+partyline (0.2.10-1) unstable; urgency=medium
+
+  * Give every channel and query its own log file.
+
+ -- Greg Gauthier <gmgauthier@protonmail.com>  Fri, 02 Oct 2026 11:41:38 +0100
+
 partyline (0.2.9-1) unstable; urgency=medium
 
   * Keep last_server on a renamed server.

@@ -28,6 +28,30 @@ std::string safe_leaf(const std::string& in, bool allow_hash)
   return out;
 }
 
+/* File name for a channel or query log. ASCII letters are lowercased (IRC
+ * names are case-insensitive); letters, digits, '.', '-', '_' (and '#' for
+ * channels) are kept; every other byte, '%' included, becomes %xx. Distinct
+ * names therefore never share a file, and names made of the kept characters
+ * keep the file they had before. */
+std::string log_leaf(const std::string& in, bool allow_hash)
+{
+  static const char hex[] = "0123456789abcdef";
+  std::string out;
+  out.reserve(in.size());
+  for (unsigned char c : in) {
+    if (g_ascii_isalnum(c) || c == '.' || c == '-' || c == '_' || (allow_hash && c == '#')) {
+      out.push_back(static_cast<char>(g_ascii_tolower(c)));
+    } else {
+      out.push_back('%');
+      out.push_back(hex[c >> 4]);
+      out.push_back(hex[c & 0x0f]);
+    }
+  }
+  if (out.empty())
+    out = "unknown";
+  return out;
+}
+
 std::string stamp()
 {
   GDateTime* dt = g_date_time_new_now_local();
@@ -57,12 +81,12 @@ std::string ChatLog::file_path(const std::string& leaf) const
 
 void ChatLog::write_channel(const std::string& channel, const std::string& line)
 {
-  write(safe_leaf(channel, true) + ".txt", line);
+  write(log_leaf(channel, true) + ".txt", line);
 }
 
 void ChatLog::write_query(const std::string& nick, const std::string& line)
 {
-  write(safe_leaf(nick, false) + ".txt", line);
+  write(log_leaf(nick, false) + ".txt", line);
 }
 
 std::vector<std::string> ChatLog::tail_channel(const std::string& channel, int max_lines) const
@@ -70,7 +94,7 @@ std::vector<std::string> ChatLog::tail_channel(const std::string& channel, int m
   std::vector<std::string> out;
   if (host_key_.empty() || max_lines <= 0)
     return out;
-  const std::string path = file_path(safe_leaf(channel, true) + ".txt");
+  const std::string path = file_path(log_leaf(channel, true) + ".txt");
   FILE* fp = std::fopen(path.c_str(), "rb");
   if (!fp)
     return out;
