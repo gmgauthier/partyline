@@ -1,3 +1,9 @@
+partyline (0.2.11-1) unstable; urgency=medium
+
+  * Show kicks as kicks, with the kicker and reason.
+
+ -- Greg Gauthier <gmgauthier@protonmail.com>  Fri, 02 Oct 2026 11:45:01 +0100
+
 partyline (0.2.10-1) unstable; urgency=medium
 
   * Give every channel and query its own log file.

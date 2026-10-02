@@ -291,6 +291,44 @@ void test_nick_retry_gives_up()
   s.stop();
 }
 
+struct Kicked {
+  std::string channel, nick, by, reason;
+  bool me;
+};
+
+void test_kick_is_its_own_event_with_reason()
+{
+  fake_irc::Server srv;
+  partyline::IrcSession s;
+  std::vector<Kicked> kicks;
+  int parts = 0;
+  s.signal_kick.connect([&](const Glib::ustring& c, const Glib::ustring& n, const Glib::ustring& by,
+                            const Glib::ustring& r, bool me) {
+    kicks.push_back({c.raw(), n.raw(), by.raw(), r.raw(), me});
+  });
+  s.signal_part.connect([&](const Glib::ustring&, const Glib::ustring&, bool) { ++parts; });
+  s.start("127.0.0.1", srv.port(), false, false, "bob", "Bob");
+  CHECK(fake_irc::pump_until([&]() { return srv.lines().size() >= 2; }));
+  srv.send(":srv 001 bob :Welcome");
+  srv.send(":op!o@h KICK #chan al :spamming");
+  srv.send(":op!o@h KICK #chan bob");
+  srv.send(":al!a@h PART #other");
+  CHECK(fake_irc::pump_until([&]() { return kicks.size() >= 2 && parts >= 1; }));
+  CHECK(parts == 1);
+  CHECK(kicks.size() == 2);
+  if (kicks.size() == 2) {
+    CHECK(kicks[0].channel == "#chan");
+    CHECK(kicks[0].nick == "al");
+    CHECK(kicks[0].by == "op");
+    CHECK(kicks[0].reason == "spamming");
+    CHECK(!kicks[0].me);
+    CHECK(kicks[1].nick == "bob");
+    CHECK(kicks[1].reason.empty());
+    CHECK(kicks[1].me);
+  }
+  s.stop();
+}
+
 }  // namespace
 
 int main()
@@ -304,5 +342,6 @@ int main()
   test_action_reaches_the_buffer_and_version_is_exact();
   test_rejected_nick_is_retried_until_registered();
   test_nick_retry_gives_up();
+  test_kick_is_its_own_event_with_reason();
   return suite_test::done("session");
 }
