@@ -928,7 +928,8 @@ void MainWindow::on_session_registered()
   registered_ = true;
   if (session_)
     connected_nick_ = session_->nick();
-  settings_.nick = connected_nick_.raw();
+  /* The registered nick may be a per-server nick or a retry alternate, so
+   * it is not written over the saved default. */
   settings_.last_server = connected_server_id_.raw();
   settings_.save();
   btn_join_.set_sensitive(true);
@@ -1239,7 +1240,7 @@ void MainWindow::on_session_nick(const Glib::ustring& old_nick, const Glib::ustr
   }
   if (me) {
     connected_nick_ = new_nick;
-    settings_.nick = new_nick.raw();
+    settings_.remember_nick(connected_server_id_.raw(), new_nick.raw());
     settings_.save();
     append_status("* You are now known as " + new_nick);
   }
