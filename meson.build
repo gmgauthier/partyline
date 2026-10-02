@@ -80,3 +80,12 @@ partyline_tests = executable(
   dependencies: [gtkmm],
 )
 test('log', partyline_tests)
+
+session_tests = executable(
+  'partyline-session-tests',
+  'tests/test_session.cpp',
+  'src/irc_session.cpp',
+  include_directories: inc,
+  dependencies: [gtkmm, dependency('threads')],
+)
+test('session', session_tests, timeout: 60)

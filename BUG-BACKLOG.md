@@ -2,17 +2,9 @@
 
 Reviewed 2026-10-01 against the 0.2.0 sources.
 
-`meson test` runs `tests/test_log.cpp` (`log`). It checks that a log written before `set_host` is dropped, that the host directory is lowercased, and that a leaf such as `../../tmp-escape` stays inside the host directory as `.._.._tmp-escape.txt`. It does not treat two different channel names collapsing to one file as correct. `/quote` is the intentional raw-command path and is not a defect.
+`meson test` runs `tests/test_log.cpp` (`log`) and `tests/test_session.cpp` (`session`, an `IrcSession` against a one-client fake server on 127.0.0.1 from `tests/fake_irc.hpp`). It checks that a log written before `set_host` is dropped, that the host directory is lowercased, and that a leaf such as `../../tmp-escape` stays inside the host directory as `.._.._tmp-escape.txt`. It does not treat two different channel names collapsing to one file as correct. `/quote` is the intentional raw-command path and is not a defect. `session` checks that a CR or LF in a nick, real name, channel, mask, target, message, or `/quote` never reaches the socket as a second command.
 
 ## Open
-
-### A newline in a nick, channel, or message is a second IRC command
-
-- Severity: security
-- Confidence: high
-- Where: `src/irc_session.cpp:398`
-- Trigger: A nick, real name, channel, or message that contains CR or LF reaches `write_line`. JOIN, PART, PRIVMSG, WHOIS, LIST, NICK, and USER concatenate those fields and do not filter breaks. A KeyFile value is one way in. This is not a claim about paste into the input entry: GTK often strips line breaks on insert, and that path was not executed.
-- Outcome: `write_line` appends `\r\n` only when the buffer does not already end in `\r\n`, then writes the whole buffer. A break in the middle is a second command on the socket.
 
 ### The channel pane shows text the server did not get
 
@@ -89,3 +81,14 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 ## Closed
 
 None.
+
+## Closed
+
+### A newline in a nick, channel, or message is a second IRC command
+
+- Severity: security
+- Confidence: high
+- Where: `src/irc_session.cpp:398`
+- Trigger: A nick, real name, channel, or message that contains CR or LF reaches `write_line`. JOIN, PART, PRIVMSG, WHOIS, LIST, NICK, and USER concatenate those fields and do not filter breaks. A KeyFile value is one way in. This is not a claim about paste into the input entry: GTK often strips line breaks on insert, and that path was not executed.
+- Outcome: `write_line` appends `\r\n` only when the buffer does not already end in `\r\n`, then writes the whole buffer. A break in the middle is a second command on the socket.
+- Fixed in v0.2.2: Nick, channel, target, and mask parameters end at the first space, CR, LF, or NUL. The real name has line breaks turned into spaces. A message with line breaks is sent as one PRIVMSG per line. `write_line` drops anything after a CR, LF, or NUL, so even `/quote` sends one command.
