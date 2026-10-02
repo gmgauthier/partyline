@@ -6,14 +6,6 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 
 ## Open
 
-### Lag ping races the socket thread on a std::string
-
-- Severity: crash
-- Confidence: high
-- Where: `src/irc_session.cpp:319`, `src/irc_session.cpp:503`, `src/main_window.cpp:1275`
-- Trigger: Connect, or leave the client up. `send_lag_ping` runs on the UI thread from registration and from the 60-second lag timeout. `handle_line` runs on the socket thread.
-- Outcome: `send_lag_ping` assigns `lag_token_` and `lag_sent_us_` with no lock. `handle_line` compares `token == lag_token_` and reads `lag_sent_us_` on the other thread. `nick_mu_` does not cover these. Reassigning the string under the reader is a use-after-free. `lag_sent_us_` can tear.
-
 ### Channel NOTICE never reaches the channel buffer
 
 - Severity: incorrect
@@ -75,6 +67,15 @@ Reviewed 2026-10-01 against the 0.2.0 sources.
 None.
 
 ## Closed
+
+### Lag ping races the socket thread on a std::string
+
+- Severity: crash
+- Confidence: high
+- Where: `src/irc_session.cpp:319`, `src/irc_session.cpp:503`, `src/main_window.cpp:1275`
+- Trigger: Connect, or leave the client up. `send_lag_ping` runs on the UI thread from registration and from the 60-second lag timeout. `handle_line` runs on the socket thread.
+- Outcome: `send_lag_ping` assigns `lag_token_` and `lag_sent_us_` with no lock. `handle_line` compares `token == lag_token_` and reads `lag_sent_us_` on the other thread. `nick_mu_` does not cover these. Reassigning the string under the reader is a use-after-free. `lag_sent_us_` can tear.
+- Fixed in v0.2.4: `lag_token_` and `lag_sent_us_` are guarded by a new `lag_mu_` in `send_lag_ping` and in the PONG match in `handle_line`. The `session` test pings while PONGs arrive; built with `-Db_sanitize=thread` it reported the race before the fix and is clean after.
 
 ### The channel pane shows text the server did not get
 

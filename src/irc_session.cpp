@@ -385,9 +385,14 @@ void IrcSession::change_nick(const std::string& nick)
 
 void IrcSession::send_lag_ping()
 {
-  lag_sent_us_ = g_get_monotonic_time();
-  lag_token_ = std::to_string(lag_sent_us_);
-  write_line("PING :" + lag_token_);
+  std::string token;
+  {
+    std::lock_guard<std::mutex> lock(lag_mu_);
+    lag_sent_us_ = g_get_monotonic_time();
+    lag_token_ = std::to_string(lag_sent_us_);
+    token = lag_token_;
+  }
+  write_line("PING :" + token);
 }
 
 void IrcSession::enqueue(Event ev)
@@ -573,10 +578,17 @@ void IrcSession::handle_line(const std::string& line)
 
   if (cmd == "PONG") {
     const std::string token = p.params.empty() ? std::string() : p.params.back();
-    if (!lag_token_.empty() && token == lag_token_) {
-      const gint64 now = g_get_monotonic_time();
-      lag_ms_.store(static_cast<int>((now - lag_sent_us_) / 1000));
-      lag_token_.clear();
+    bool matched = false;
+    {
+      std::lock_guard<std::mutex> lock(lag_mu_);
+      if (!lag_token_.empty() && token == lag_token_) {
+        const gint64 now = g_get_monotonic_time();
+        lag_ms_.store(static_cast<int>((now - lag_sent_us_) / 1000));
+        lag_token_.clear();
+        matched = true;
+      }
+    }
+    if (matched) {
       enqueue({Event::Lag, {}, {}, {}, false, 0, {}});
       return;
     }

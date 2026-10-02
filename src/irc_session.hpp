@@ -124,6 +124,9 @@ class IrcSession {
   std::string names_chan_;
   std::vector<std::string> names_acc_;
   std::atomic<int> lag_ms_{-1};
+  /* lag_token_ and lag_sent_us_ are set on the UI thread and read on the
+   * socket thread. */
+  std::mutex lag_mu_;
   std::string lag_token_;
   gint64 lag_sent_us_ = 0;
 };
