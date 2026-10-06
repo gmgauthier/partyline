@@ -46,7 +46,7 @@ class MainWindow : public Gtk::Window {
   void drop_channel(const Glib::ustring& channel);
   Glib::ustring normalize_channel(Glib::ustring c) const;
   bool same_chan(const Glib::ustring& a, const Glib::ustring& b) const;
-  void do_join(const Glib::ustring& channel);
+  void do_join(const Glib::ustring& channel, const Glib::ustring& key = {});
   void handle_command(const Glib::ustring& line);
   void on_servers();
   void on_connect();

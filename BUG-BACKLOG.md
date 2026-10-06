@@ -2,13 +2,22 @@
 
 Reviewed 2026-10-01 against the 0.2.0 sources.
 
-`meson test` runs `tests/test_log.cpp` (`log`), `tests/test_settings.cpp` (`settings`), and `tests/test_session.cpp` (`session`, an `IrcSession` against a one-client fake server on 127.0.0.1 from `tests/fake_irc.hpp`). It checks that a log written before `set_host` is dropped, that the host directory is lowercased, that a leaf such as `../../tmp-escape` stays inside the host directory as `..%2f..%2ftmp-escape.txt`, and that different channel or nick names (`#c++` and `#c__`, `foo~bar` and `foo_bar`) get different files. `/quote` is the intentional raw-command path and is not a defect. `session` checks that a CR or LF in a nick, real name, channel, mask, target, message, or `/quote` never reaches the socket as a second command. `settings` checks that removing the remembered server clears that id, and that removing a different server leaves it. A missing config loads the shipped servers. A saved list with no servers stays empty.
+`meson test` runs `tests/test_log.cpp` (`log`), `tests/test_settings.cpp` (`settings`), and `tests/test_session.cpp` (`session`, an `IrcSession` against a one-client fake server on 127.0.0.1 from `tests/fake_irc.hpp`). It checks that a log written before `set_host` is dropped, that the host directory is lowercased, that a leaf such as `../../tmp-escape` stays inside the host directory as `..%2f..%2ftmp-escape.txt`, and that different channel or nick names (`#c++` and `#c__`, `foo~bar` and `foo_bar`) get different files. `/quote` is the intentional raw-command path and is not a defect. `session` checks that a CR or LF in a nick, real name, channel, mask, target, message, or `/quote` never reaches the socket as a second command. A join key and a part reason are sent. A newline in the channel, the key, or the reason does not start a second command. `settings` checks that removing the remembered server clears that id, and that removing a different server leaves it. A missing config loads the shipped servers. A saved list with no servers stays empty.
 
 ## Open
 
 None.
 
 ## Closed
+
+### /join drops the key and /part drops the reason
+
+- Severity: incorrect
+- Confidence: high
+- Where: `src/main_window.cpp` `handle_command`, `src/irc_session.cpp` `join`, `part`
+- Trigger: `/join #secret hunter2`, or `/part #secret going home`.
+- Outcome: The whole remainder is treated as the channel. `irc_token` keeps the first word, so the key and the part reason never go out. That cut is what stops a newline in a channel from becoming a second command.
+- Fixed in v0.2.14: The channel is split off first and still cut at a space or a newline. A join key is sent as its own word. A part reason is sent as the trailing text, and a newline in it becomes a space.
 
 ### Deleting every server restores the shipped list
 

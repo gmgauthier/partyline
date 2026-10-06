@@ -73,6 +73,40 @@ bool valid_utf8(const std::string& s)
   return g_utf8_validate(s.data(), static_cast<gssize>(s.size()), nullptr);
 }
 
+void test_join_sends_the_key_and_part_sends_the_reason()
+{
+  const auto bare = partyline::split_channel_tail("#secret");
+  CHECK(bare.channel == "#secret");
+  CHECK(bare.rest.empty());
+  const auto keyed = partyline::split_channel_tail("  #secret   hunter2");
+  CHECK(keyed.channel == "#secret");
+  CHECK(keyed.rest == "hunter2");
+  const auto reason = partyline::split_channel_tail("#secret going home");
+  CHECK(reason.channel == "#secret");
+  CHECK(reason.rest == "going home");
+  const auto none = partyline::split_channel_tail("   ");
+  CHECK(none.channel.empty());
+  CHECK(none.rest.empty());
+
+  fake_irc::Server srv;
+  partyline::IrcSession s;
+  s.start("127.0.0.1", srv.port(), false, false, "bob", "Bob");
+  CHECK(fake_irc::pump_until([&]() { return srv.lines().size() >= 2; }));
+
+  s.join("#secret", "hunter2");
+  s.join("#a\r\nQUIT :join", "k\r\nQUIT :key");
+  s.part("#secret", "going home");
+  s.part("#a\nQUIT :part", "bye\r\nQUIT :x");
+  CHECK(fake_irc::pump_until([&]() { return has_line(srv, "PART #a :bye  QUIT :x"); }));
+  CHECK(has_line(srv, "JOIN #secret hunter2"));
+  CHECK(has_line(srv, "JOIN #a k"));
+  CHECK(has_line(srv, "PART #secret :going home"));
+  CHECK(!any_line_starts(srv, "QUIT"));
+  if (suite_test::failures)
+    dump(srv);
+  s.stop();
+}
+
 void test_long_privmsg_is_split_on_utf8_boundaries()
 {
   fake_irc::Server srv;
@@ -335,6 +369,7 @@ int main()
 {
   Gio::init();
   test_line_breaks_never_start_a_second_command();
+  test_join_sends_the_key_and_part_sends_the_reason();
   test_long_privmsg_is_split_on_utf8_boundaries();
   test_privmsg_without_a_socket_reports_nothing_sent();
   test_lag_ping_while_pongs_arrive();

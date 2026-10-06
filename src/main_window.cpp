@@ -672,7 +672,7 @@ bool MainWindow::same_chan(const Glib::ustring& a, const Glib::ustring& b) const
   return g_ascii_strcasecmp(a.c_str(), b.c_str()) == 0;
 }
 
-void MainWindow::do_join(const Glib::ustring& channel)
+void MainWindow::do_join(const Glib::ustring& channel, const Glib::ustring& key)
 {
   if (!session_ || !registered_ || channel.empty())
     return;
@@ -680,7 +680,7 @@ void MainWindow::do_join(const Glib::ustring& channel)
     show_channel(channel);
     return;
   }
-  session_->join(channel.raw());
+  session_->join(channel.raw(), key.raw());
 }
 
 void MainWindow::handle_command(const Glib::ustring& line)
@@ -693,14 +693,16 @@ void MainWindow::handle_command(const Glib::ustring& line)
     cmd = cmd.substr(0, sp);
   }
   const Glib::ustring low = cmd.lowercase();
-  if (low == "join")
-    do_join(normalize_channel(rest));
-  else if (low == "part") {
-    Glib::ustring ch = normalize_channel(rest);
+  if (low == "join") {
+    const auto tail = split_channel_tail(rest.raw());
+    do_join(normalize_channel(tail.channel), tail.rest);
+  } else if (low == "part") {
+    const auto tail = split_channel_tail(rest.raw());
+    Glib::ustring ch = normalize_channel(tail.channel);
     if (ch.empty())
       ch = current_channel_;
     if (!ch.empty() && session_)
-      session_->part(ch.raw());
+      session_->part(ch.raw(), tail.rest);
   } else if (low == "quit")
     on_disconnect();
   else if (low == "quote") {
