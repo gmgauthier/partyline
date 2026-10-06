@@ -193,7 +193,6 @@ void ServersDialog::on_ok()
     settings_.nick = Settings::default_nick();
   settings_.servers = working_;
   settings_.last_server = last_server_;
-  settings_.seed_if_empty();
   settings_.save();
 }
 

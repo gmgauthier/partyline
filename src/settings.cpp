@@ -224,9 +224,12 @@ void Settings::load()
 {
   if (nick.empty())
     nick = default_nick();
+  // A saved file wins, even when it lists no servers. The shipped list is
+  // only for a first run.
   if (Glib::file_test(config_path(), Glib::FILE_TEST_IS_REGULAR))
     load_from_file(config_path(), true);
-  seed_if_empty();
+  else
+    seed_if_empty();
 }
 
 void Settings::save() const
