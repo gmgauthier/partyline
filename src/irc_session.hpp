@@ -15,6 +15,13 @@
 
 namespace partyline {
 
+/** First word is the channel. The remainder is a join key or a part reason. */
+struct ChannelTail {
+  std::string channel;
+  std::string rest;
+};
+ChannelTail split_channel_tail(const std::string& text);
+
 class IrcSession {
  public:
   IrcSession();
@@ -32,8 +39,8 @@ class IrcSession {
   }
   std::string nick() const;
 
-  void join(const std::string& channel);
-  void part(const std::string& channel);
+  void join(const std::string& channel, const std::string& key = {});
+  void part(const std::string& channel, const std::string& reason = {});
   /** What privmsg() put on the wire. */
   struct SendResult {
     std::vector<std::string> sent;  ///< Message bodies written, in order.

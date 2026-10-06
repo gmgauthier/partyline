@@ -270,6 +270,27 @@ std::vector<std::string> utf8_chunks(const std::string& text, size_t max)
 
 }  // namespace
 
+ChannelTail split_channel_tail(const std::string& text)
+{
+  ChannelTail tail;
+  size_t i = 0;
+  while (i < text.size() && text[i] == ' ')
+    ++i;
+  if (i >= text.size())
+    return tail;
+  const auto sp = text.find(' ', i);
+  if (sp == std::string::npos) {
+    tail.channel = text.substr(i);
+    return tail;
+  }
+  tail.channel = text.substr(i, sp - i);
+  size_t r = sp + 1;
+  while (r < text.size() && text[r] == ' ')
+    ++r;
+  tail.rest = text.substr(r);
+  return tail;
+}
+
 IrcSession::IrcSession()
 {
   dispatcher_.connect(sigc::mem_fun(*this, &IrcSession::on_dispatch));
@@ -349,18 +370,28 @@ void IrcSession::stop()
   cancellable_.reset();
 }
 
-void IrcSession::join(const std::string& channel)
+void IrcSession::join(const std::string& channel, const std::string& key)
 {
   const std::string c = irc_token(channel);
-  if (!c.empty())
+  if (c.empty())
+    return;
+  const std::string k = irc_token(key);
+  if (k.empty())
     write_line("JOIN " + c);
+  else
+    write_line("JOIN " + c + " " + k);
 }
 
-void IrcSession::part(const std::string& channel)
+void IrcSession::part(const std::string& channel, const std::string& reason)
 {
   const std::string c = irc_token(channel);
-  if (!c.empty())
+  if (c.empty())
+    return;
+  const std::string why = irc_text(reason);
+  if (why.empty())
     write_line("PART " + c);
+  else
+    write_line("PART " + c + " :" + why);
 }
 
 IrcSession::SendResult IrcSession::privmsg(const std::string& target, const std::string& text)
