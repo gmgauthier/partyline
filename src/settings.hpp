@@ -41,6 +41,9 @@ struct Settings {
    *  servers. If the old id was tracked_id (e.g. last_server), tracked_id
    *  follows the server to its new id. */
   static void assign_id(std::vector<Server>& servers, size_t index, std::string& tracked_id);
+  /** Erases servers[index]. If that server's id was tracked_id, tracked_id
+   *  is cleared. */
+  static void remove_server(std::vector<Server>& servers, size_t index, std::string& tracked_id);
   static std::string default_nick();
 };
 

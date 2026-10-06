@@ -66,6 +66,26 @@ void test_renaming_the_last_server_moves_last_server()
   CHECK(last == "libera_chat");
 }
 
+void test_removing_the_last_server_clears_it()
+{
+  auto s = two_servers();
+  std::string last = "libera";
+  partyline::Settings::remove_server(s.servers, 0, last);
+  CHECK(last.empty());
+  CHECK(s.servers.size() == 1);
+  CHECK(s.servers[0].id == "oftc");
+}
+
+void test_removing_another_server_keeps_last_server()
+{
+  auto s = two_servers();
+  std::string last = "libera";
+  partyline::Settings::remove_server(s.servers, 1, last);
+  CHECK(last == "libera");
+  CHECK(s.servers.size() == 1);
+  CHECK(s.servers[0].id == "libera");
+}
+
 void test_new_server_does_not_take_an_empty_last_server()
 {
   auto s = two_servers();
@@ -86,6 +106,8 @@ int main()
   test_nick_on_a_server_without_one_updates_the_default();
   test_unknown_server_or_empty_nick();
   test_renaming_the_last_server_moves_last_server();
+  test_removing_the_last_server_clears_it();
+  test_removing_another_server_keeps_last_server();
   test_new_server_does_not_take_an_empty_last_server();
   return suite_test::done("settings");
 }

@@ -2,7 +2,7 @@
 
 Reviewed 2026-10-01 against the 0.2.0 sources.
 
-`meson test` runs `tests/test_log.cpp` (`log`), `tests/test_settings.cpp` (`settings`), and `tests/test_session.cpp` (`session`, an `IrcSession` against a one-client fake server on 127.0.0.1 from `tests/fake_irc.hpp`). It checks that a log written before `set_host` is dropped, that the host directory is lowercased, that a leaf such as `../../tmp-escape` stays inside the host directory as `..%2f..%2ftmp-escape.txt`, and that different channel or nick names (`#c++` and `#c__`, `foo~bar` and `foo_bar`) get different files. `/quote` is the intentional raw-command path and is not a defect. `session` checks that a CR or LF in a nick, real name, channel, mask, target, message, or `/quote` never reaches the socket as a second command.
+`meson test` runs `tests/test_log.cpp` (`log`), `tests/test_settings.cpp` (`settings`), and `tests/test_session.cpp` (`session`, an `IrcSession` against a one-client fake server on 127.0.0.1 from `tests/fake_irc.hpp`). It checks that a log written before `set_host` is dropped, that the host directory is lowercased, that a leaf such as `../../tmp-escape` stays inside the host directory as `..%2f..%2ftmp-escape.txt`, and that different channel or nick names (`#c++` and `#c__`, `foo~bar` and `foo_bar`) get different files. `/quote` is the intentional raw-command path and is not a defect. `session` checks that a CR or LF in a nick, real name, channel, mask, target, message, or `/quote` never reaches the socket as a second command. `settings` checks that removing the remembered server clears that id, and that removing a different server leaves it.
 
 ## Open
 
@@ -10,9 +10,14 @@ None.
 
 ## Closed
 
-None.
+### Removing the last server leaves Connect on the first server
 
-## Closed
+- Severity: incorrect
+- Confidence: high
+- Where: `src/servers_dialog.cpp` `on_remove_server`, `src/main_window.cpp` `on_connect`
+- Trigger: Remove the server remembered as the last server, leave other servers in the list, then Connect.
+- Outcome: `last_server` still names the deleted id. The server tree does not select a row. Connect misses `find_id` and uses the first server in the list.
+- Fixed in v0.2.12: Removing that server clears the remembered id. With none remembered, the tree selects the first server that is still there.
 
 ### Kick is shown as a part, and the reason is dropped
 

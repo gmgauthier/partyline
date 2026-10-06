@@ -211,6 +211,15 @@ void Settings::assign_id(std::vector<Server>& servers, size_t index, std::string
   s.id = id;
 }
 
+void Settings::remove_server(std::vector<Server>& servers, size_t index, std::string& tracked_id)
+{
+  if (index >= servers.size())
+    return;
+  if (!servers[index].id.empty() && servers[index].id == tracked_id)
+    tracked_id.clear();
+  servers.erase(servers.begin() + static_cast<std::vector<Server>::difference_type>(index));
+}
+
 void Settings::load()
 {
   if (nick.empty())

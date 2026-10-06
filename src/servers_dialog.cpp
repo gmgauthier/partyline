@@ -177,7 +177,7 @@ void ServersDialog::on_remove_server()
 {
   if (current_ < 0 || current_ >= static_cast<int>(working_.size()))
     return;
-  working_.erase(working_.begin() + current_);
+  Settings::remove_server(working_, static_cast<size_t>(current_), last_server_);
   current_ = -1;
   refill();
   if (!store_->children().empty())
