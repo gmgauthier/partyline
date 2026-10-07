@@ -55,6 +55,17 @@ int main()
   CHECK(Glib::file_test(query_dir + "/nick%20name.txt", Glib::FILE_TEST_IS_REGULAR));
   CHECK(!Glib::file_test("/tmp/tmp-escape.txt", Glib::FILE_TEST_EXISTS));
 
+  const auto query = log.tail_query("Nick Name", 10);
+  CHECK(query.size() == 1);
+  CHECK(query[0].find("psst") != std::string::npos);
+  const auto query_folded = log.tail_query("nick name", 10);
+  CHECK(query_folded.size() == 1);
+  CHECK(log.tail_query("Nick Name", 0).empty());
+  log.write_query("Nick Name", "again");
+  const auto query_two = log.tail_query("NICK NAME", 1);
+  CHECK(query_two.size() == 1);
+  CHECK(query_two[0].find("again") != std::string::npos);
+
   CHECK(log.tail_channel("#lcos", 0).empty());
 
   /* Different channels and nicks never share a file. */

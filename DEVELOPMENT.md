@@ -25,7 +25,7 @@ Repos: https://gitea.scriptorium/gmgauthier/partyline (origin), https://github.c
 | TLS | **Required in v1.** Plaintext is a debug toggle, off by default |
 | Engine | **GIO `SocketClient` + TLS** (glib-networking) and a tiny RFC1459 speaker (`NICK`/`USER`/`PING`/`PONG`/`QUIT`). Debian `libircclient1` has no OpenSSL |
 | Thread | Library/socket on a worker. UI thread only paints. `Glib::Dispatcher` (or equivalent) across the gap |
-| Commands | Typed line: ordinary text is `PRIVMSG` to the current target. Lines starting `/` are client commands: `/join` `/part` `/quit` `/nick` `/msg` `/whois` `/list` `/quote`. Unknown `/` → `/quote` |
+| Commands | Typed line: ordinary text is `PRIVMSG` to the current target. Lines starting `/` are client commands: `/join` `/part` `/quit` `/nick` `/msg` `/query` `/whois` `/list` `/quote`. Unknown `/` → `/quote` |
 | Never as v1 | DCC, ident daemon, SASL (unless the wrap makes it cheap), bouncer, Matrix, plugins, scripts, tray, bubbles, header bar, URL unfurl, channel logs as identity |
 | Network | User-configured host/port/nick. No account service. No daemon to launch |
 | Init | No systemd. Config `~/.config/partyline/partyline.ini` |
@@ -50,6 +50,7 @@ Repos: https://gitea.scriptorium/gmgauthier/partyline (origin), https://github.c
 |   Status   |  <bob> hi                          |  bob           |
 |   #lcos    |                                    |  you           |
 |   #devuan  |                                    |                |
+|   bob      |                                    |                |
 |  OFTC      |                                    |                |
 +------------+------------------------------------+----------------+
 | [#lcos] ______________________________________________  [Send]   |
@@ -57,6 +58,8 @@ Repos: https://gitea.scriptorium/gmgauthier/partyline (origin), https://github.c
 | Libera  tls  lag 0.2s  12 users                                  |
 +------------------------------------------------------------------+
 ```
+
+A query is a row under the connected server, after Status and the channels, named with the other nick (`bob` above). It is not a join. Closing it sends nothing. The centre buffer and Send work as they do for a channel, and the nick list shows that one nick. An incoming private message or `/me` opens that nick's query and selects it. `/query nick` does the same, and `/query nick text` also sends. `/msg nick text` sends without opening a query and without leaving the current buffer; if that query is already open, the line is written there, and otherwise it is echoed on Status. `/msg #channel` still writes into the channel. Double-clicking a nick, or Query on the nick menu, opens the query. Their nick change renames the row. Their quit leaves the query open and appends a quit line. Disconnect clears queries with the channels. A notice to you, `/whois`, and other CTCP stay on Status. The raw protocol line is still appended to Status.
 
 ### Menus
 
@@ -95,7 +98,7 @@ Speak these; ignore the rest without crashing.
 | out | `PONG` | Library or three lines of ours |
 | in | `001`–`004` motd | Status buffer |
 | in | `PING` | Pong |
-| in | `PRIVMSG` `NOTICE` | Channel or query buffer. Query windows *later* — v1 may dump queries on Status |
+| in | `PRIVMSG` `NOTICE` | Channel buffer, or a query buffer when the target is you. A user notice stays on Status |
 | in | `JOIN` `PART` `QUIT` `NICK` | Channel line + nick list |
 | in | `353` `366` | Names list |
 | in | `433` nick in use | Status error; do not loop forever |
@@ -117,7 +120,7 @@ v1 is M0 through M6. Do not open M7+ until this set has been lived with.
 | **M5 — Polish** | Keys, status `tls` / lag / usercount, `/msg` `/quote` `/nick`. Chat pane palettes. **Done.** |
 | **M6 — Package** | `debian/`, `scripts/release.sh` → `.deb`, tarball, AppImage. Tag `v0.1.1`. **Done.** |
 
-After v1: SASL, query windows, highlight, notify, DCC, ident, auto-join. Channel logs: `~/.local/share/partyline/logs/<host>/#chan.txt`. `/whois` prints to Status. Chat palettes ship in **M5** if they fit; extra skins wait.
+After v1: SASL, highlight, notify, DCC, ident, auto-join. Query windows are in: one buffer per nick, opened by an incoming private message, `/query`, or a double-click. Channel logs: `~/.local/share/partyline/logs/<host>/#chan.txt`. Query logs use the same directory and the other nick as the file name. `/whois` prints to Status. Chat palettes ship in **M5** if they fit; extra skins wait.
 
 ## Traps
 

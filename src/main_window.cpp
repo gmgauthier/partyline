@@ -111,6 +111,14 @@ bool nick_eq(const Glib::ustring& a, const Glib::ustring& b)
   return g_ascii_strcasecmp(strip_nick_prefix(a).c_str(), strip_nick_prefix(b).c_str()) == 0;
 }
 
+bool is_channel_name(const Glib::ustring& name)
+{
+  if (name.empty())
+    return false;
+  const gunichar c = name[0];
+  return c == '#' || c == '&' || c == '+' || c == '!';
+}
+
 }  // namespace
 
 MainWindow::MainWindow()
@@ -289,7 +297,8 @@ void MainWindow::build_body()
       "Not connected.\n\n"
       "Select a server in the tree, then Connect.\n"
       "File → Servers… edits the list (Libera and OFTC are seeded).\n"
-      "Join… or /join #channel once you are connected.\n");
+      "Join… or /join #channel once you are connected.\n"
+      "/query nick opens a private window. /msg nick text sends without one.\n");
 
   buffer_.set_editable(false);
   buffer_.set_wrap_mode(Gtk::WRAP_WORD_CHAR);
@@ -356,6 +365,16 @@ void MainWindow::build_body()
   chan_menu_.append(*leave);
   chan_menu_.show_all();
 
+  auto* close_query = Gtk::manage(new Gtk::MenuItem("_Close", true));
+  close_query->signal_activate().connect(sigc::mem_fun(*this, &MainWindow::on_tree_close_query));
+  query_menu_.append(*close_query);
+  query_menu_.show_all();
+
+  auto* query_nick = Gtk::manage(new Gtk::MenuItem("_Query", true));
+  query_nick->signal_activate().connect(sigc::mem_fun(*this, &MainWindow::on_nick_query));
+  nick_menu_.append(*query_nick);
+  nick_menu_.show_all();
+
   outer_.pack1(tree_scroll_, false, true);
   outer_.pack2(inner_, true, false);
   outer_.set_position(180);
@@ -410,6 +429,12 @@ void MainWindow::fill_tree_connected()
         crow[col_tree_kind_] = 2;
         crow[col_server_id_] = s.id;
       }
+      for (const auto& q : queries_) {
+        auto qrow = *tree_store_->append(row.children());
+        qrow[col_tree_name_] = q.nick;
+        qrow[col_tree_kind_] = 3;
+        qrow[col_server_id_] = s.id;
+      }
     }
   }
   tree_view_.expand_all();
@@ -446,6 +471,8 @@ void MainWindow::select_tree(int kind, const Glib::ustring& server_id, const Gli
       return false;
     if (kind == 2 && !same_chan((*it)[col_tree_name_], channel))
       return false;
+    if (kind == 3 && !nick_eq((*it)[col_tree_name_], channel))
+      return false;
     const Gtk::TreeModel::Path path(it);
     tree_current_path_ = path;
     tree_view_.scroll_to_row(path);
@@ -476,8 +503,13 @@ void MainWindow::refresh_status_bar()
       s += buf;
     }
   }
-  if (const Chan* ch = find_chan(current_channel_))
-    s += "  " + ch->name + "  " + std::to_string(ch->nicks.size()) + " users";
+  if (pane_ == Pane::Channel) {
+    if (const Chan* ch = find_chan(current_channel_))
+      s += "  " + ch->name + "  " + std::to_string(ch->nicks.size()) + " users";
+  } else if (pane_ == Pane::Query) {
+    if (const QueryBuf* q = find_query(current_query_))
+      s += "  " + q->nick;
+  }
   set_status(s);
 }
 
@@ -500,6 +532,69 @@ void MainWindow::append_channel(const Glib::ustring& channel, const Glib::ustrin
     scroll_end(buffer_);
 }
 
+void MainWindow::append_query(const Glib::ustring& nick, const Glib::ustring& text)
+{
+  QueryBuf* q = find_query(nick);
+  if (!q)
+    return;
+  const Glib::ustring line = ensure_utf8(text);
+  q->buf->insert(q->buf->end(), line + "\n");
+  chat_log_.write_query(q->nick.raw(), line.raw());
+  if (pane_ == Pane::Query && nick_eq(current_query_, q->nick))
+    scroll_end(buffer_);
+}
+
+void MainWindow::ensure_query(const Glib::ustring& nick)
+{
+  const Glib::ustring bare = strip_nick_prefix(nick);
+  if (bare.empty() || is_channel_name(bare) || find_query(bare))
+    return;
+  QueryBuf q;
+  q.nick = bare;
+  q.buf = Gtk::TextBuffer::create();
+  const auto hist = chat_log_.tail_query(bare.raw(), 500);
+  for (const auto& line : hist)
+    q.buf->insert(q.buf->end(), ensure_utf8(line) + "\n");
+  if (!hist.empty())
+    q.buf->insert(q.buf->end(), "---\n");
+  queries_.push_back(std::move(q));
+}
+
+void MainWindow::show_query(const Glib::ustring& nick)
+{
+  const bool existed = find_query(nick) != nullptr;
+  ensure_query(nick);
+  QueryBuf* q = find_query(nick);
+  if (!q)
+    return;
+  current_query_ = q->nick;
+  if (!existed)
+    fill_tree_connected();
+  select_tree(3, connected_server_id_, current_query_);
+  show_pane(Pane::Query);
+  input_.grab_focus();
+}
+
+void MainWindow::close_query(const Glib::ustring& nick)
+{
+  const bool was_current = pane_ == Pane::Query && nick_eq(current_query_, nick);
+  queries_.erase(std::remove_if(queries_.begin(), queries_.end(),
+                                [&](const QueryBuf& q) { return nick_eq(q.nick, nick); }),
+                 queries_.end());
+  if (was_current)
+    current_query_.clear();
+  fill_tree_connected();
+  if (was_current) {
+    select_tree(1, connected_server_id_);
+    show_pane(Pane::Status);
+  } else if (pane_ == Pane::Query && find_query(current_query_))
+    select_tree(3, connected_server_id_, current_query_);
+  else if (pane_ == Pane::Channel && find_chan(current_channel_))
+    select_tree(2, connected_server_id_, current_channel_);
+  else
+    select_tree(1, connected_server_id_);
+}
+
 void MainWindow::show_pane(Pane pane)
 {
   pane_ = pane;
@@ -508,6 +603,16 @@ void MainWindow::show_pane(Pane pane)
     input_target_.set_text("[Status]");
     scroll_end(buffer_);
     nick_store_->clear();
+  } else if (pane == Pane::Query) {
+    QueryBuf* q = find_query(current_query_);
+    if (!q) {
+      show_pane(Pane::Status);
+      return;
+    }
+    buffer_.set_buffer(q->buf);
+    input_target_.set_text(q->nick);
+    scroll_end(buffer_);
+    refresh_nicks();
   } else {
     Chan* ch = find_chan(current_channel_);
     if (!ch) {
@@ -569,10 +674,30 @@ const MainWindow::Chan* MainWindow::find_chan(const Glib::ustring& name) const
   return nullptr;
 }
 
+MainWindow::QueryBuf* MainWindow::find_query(const Glib::ustring& nick)
+{
+  for (auto& q : queries_) {
+    if (nick_eq(q.nick, nick))
+      return &q;
+  }
+  return nullptr;
+}
+
+const MainWindow::QueryBuf* MainWindow::find_query(const Glib::ustring& nick) const
+{
+  for (const auto& q : queries_) {
+    if (nick_eq(q.nick, nick))
+      return &q;
+  }
+  return nullptr;
+}
+
 void MainWindow::reset_channels()
 {
   channels_.clear();
+  queries_.clear();
   current_channel_.clear();
+  current_query_.clear();
   nick_hover_path_.clear();
   nick_current_path_.clear();
   nick_store_->clear();
@@ -599,6 +724,14 @@ void MainWindow::refresh_nicks()
   nick_hover_path_.clear();
   nick_current_path_.clear();
   nick_store_->clear();
+  if (pane_ == Pane::Query) {
+    QueryBuf* q = find_query(current_query_);
+    if (!q)
+      return;
+    auto row = *nick_store_->append();
+    row[col_nick_] = q->nick;
+    return;
+  }
   Chan* ch = find_chan(current_channel_);
   if (!ch || pane_ != Pane::Channel)
     return;
@@ -624,7 +757,7 @@ void MainWindow::add_nick(const Glib::ustring& channel, const Glib::ustring& nic
       return;
   }
   ch->nicks.push_back(nick);
-  if (same_chan(current_channel_, channel)) {
+  if (pane_ == Pane::Channel && same_chan(current_channel_, channel)) {
     refresh_nicks();
     refresh_status_bar();
   }
@@ -638,7 +771,7 @@ void MainWindow::remove_nick(const Glib::ustring& channel, const Glib::ustring& 
   ch->nicks.erase(std::remove_if(ch->nicks.begin(), ch->nicks.end(),
                                  [&](const Glib::ustring& n) { return nick_eq(n, nick); }),
                   ch->nicks.end());
-  if (same_chan(current_channel_, channel)) {
+  if (pane_ == Pane::Channel && same_chan(current_channel_, channel)) {
     refresh_nicks();
     refresh_status_bar();
   }
@@ -699,7 +832,7 @@ void MainWindow::handle_command(const Glib::ustring& line)
   } else if (low == "part") {
     const auto tail = split_channel_tail(rest.raw());
     Glib::ustring ch = normalize_channel(tail.channel);
-    if (ch.empty())
+    if (ch.empty() && pane_ == Pane::Channel)
       ch = current_channel_;
     if (!ch.empty() && session_)
       session_->part(ch.raw(), tail.rest);
@@ -725,14 +858,44 @@ void MainWindow::handle_command(const Glib::ustring& line)
       for (const auto& piece : r.sent) {
         if (find_chan(target))
           append_channel(target, "<" + connected_nick_ + "> " + piece);
-        else {
+        else if (QueryBuf* q = find_query(target)) {
+          /* /msg does not open a query. An open one still keeps the line. */
+          append_query(q->nick, "<" + connected_nick_ + "> " + piece);
+        } else {
           const Glib::ustring out = "* -> " + target + ": " + piece;
           append_status(out);
-          chat_log_.write_query(target.raw(), out.raw());
+          if (!is_channel_name(target))
+            chat_log_.write_query(strip_nick_prefix(target).raw(), out.raw());
         }
       }
       if (!r.complete)
         append_status("* message to " + target + " was not sent in full");
+    }
+  } else if (low == "query") {
+    Glib::ustring nick, text;
+    const auto sp2 = rest.find(' ');
+    if (sp2 == Glib::ustring::npos)
+      nick = rest;
+    else {
+      nick = rest.substr(0, sp2);
+      text = rest.substr(sp2 + 1);
+    }
+    while (!nick.empty() && nick[0] == ' ')
+      nick = nick.substr(1);
+    nick = strip_nick_prefix(nick);
+    if (nick.empty() || is_channel_name(nick)) {
+      append_status("* usage: /query <nick> [message]");
+    } else if (!session_ || !registered_) {
+      append_status("* not connected");
+    } else {
+      show_query(nick);
+      if (!text.empty()) {
+        const auto r = session_->privmsg(nick.raw(), text.raw());
+        for (const auto& piece : r.sent)
+          append_query(nick, "<" + connected_nick_ + "> " + piece);
+        if (!r.complete)
+          append_query(nick, "* message was not sent in full");
+      }
     }
   } else if (low == "whois") {
     Glib::ustring nick = rest;
@@ -902,8 +1065,16 @@ void MainWindow::on_send()
     handle_command(text);
     return;
   }
+  if (pane_ == Pane::Query && find_query(current_query_)) {
+    const auto r = session_->privmsg(current_query_.raw(), text.raw());
+    for (const auto& piece : r.sent)
+      append_query(current_query_, "<" + connected_nick_ + "> " + piece);
+    if (!r.complete)
+      append_query(current_query_, "* message was not sent in full");
+    return;
+  }
   if (pane_ != Pane::Channel || current_channel_.empty()) {
-    append_status("* not on a channel — /join #name or Join…");
+    append_status("* not on a channel — /join #name, /query <nick>, or Join…");
     show_pane(Pane::Status);
     return;
   }
@@ -958,9 +1129,9 @@ void MainWindow::on_session_privmsg(const Glib::ustring& target, const Glib::ust
   if (find_chan(target))
     append_channel(target, "<" + nick + "> " + text);
   else if (nick_eq(target, connected_nick_)) {
-    const Glib::ustring out = "* " + nick + ": " + text;
-    append_status(out);
-    chat_log_.write_query(nick.raw(), out.raw());
+    /* mIRC opens the query and leaves it ready for input. */
+    show_query(nick);
+    append_query(nick, "<" + nick + "> " + text);
   }
 }
 
@@ -977,9 +1148,8 @@ void MainWindow::on_session_action(const Glib::ustring& target, const Glib::ustr
   if (find_chan(target))
     append_channel(target, "* " + nick + " " + text);
   else if (nick_eq(target, connected_nick_)) {
-    const Glib::ustring out = "* " + nick + " " + text;
-    append_status(out);
-    chat_log_.write_query(nick.raw(), out.raw());
+    show_query(nick);
+    append_query(nick, "* " + nick + " " + text);
   }
 }
 
@@ -1022,7 +1192,7 @@ void MainWindow::on_session_part(const Glib::ustring& channel, const Glib::ustri
 
 void MainWindow::close_channel_view(const Glib::ustring& channel)
 {
-  const bool was_current = same_chan(current_channel_, channel);
+  const bool was_current = pane_ == Pane::Channel && same_chan(current_channel_, channel);
   drop_channel(channel);
   fill_tree_connected();
   if (was_current && !channels_.empty())
@@ -1030,8 +1200,12 @@ void MainWindow::close_channel_view(const Glib::ustring& channel)
   else if (was_current) {
     select_tree(1, connected_server_id_);
     show_pane(Pane::Status);
-  } else if (!current_channel_.empty())
+  } else if (pane_ == Pane::Query && find_query(current_query_))
+    select_tree(3, connected_server_id_, current_query_);
+  else if (pane_ == Pane::Channel && find_chan(current_channel_))
     select_tree(2, connected_server_id_, current_channel_);
+  else
+    select_tree(1, connected_server_id_);
 }
 
 void MainWindow::on_session_kick(const Glib::ustring& channel, const Glib::ustring& nick,
@@ -1068,6 +1242,8 @@ void MainWindow::on_session_quit(const Glib::ustring& nick)
     remove_nick(ch.name, nick);
     append_channel(ch.name, "* " + nick + " has quit");
   }
+  if (find_query(nick))
+    append_query(nick, "* " + find_query(nick)->nick + " has quit");
 }
 
 void MainWindow::on_session_names(const Glib::ustring& channel,
@@ -1077,7 +1253,7 @@ void MainWindow::on_session_names(const Glib::ustring& channel,
   if (!ch)
     return;
   ch->nicks = nicks;
-  if (same_chan(current_channel_, channel))
+  if (pane_ == Pane::Channel && same_chan(current_channel_, channel))
     refresh_nicks();
   refresh_status_bar();
 }
@@ -1145,6 +1321,22 @@ void MainWindow::on_tree_leave_channel()
     session_->part(name.raw());
 }
 
+void MainWindow::on_tree_close_query()
+{
+  auto it = tree_store_->get_iter(query_menu_path_);
+  if (!it || (*it)[col_tree_kind_] != 3)
+    return;
+  close_query((*it)[col_tree_name_]);
+}
+
+void MainWindow::on_nick_query()
+{
+  auto it = nick_store_->get_iter(nick_menu_path_);
+  if (!it || !session_ || !registered_)
+    return;
+  show_query(strip_nick_prefix((*it)[col_nick_]));
+}
+
 bool MainWindow::on_tree_button(GdkEventButton* event)
 {
   if (!event || event->type != GDK_BUTTON_PRESS)
@@ -1161,6 +1353,11 @@ bool MainWindow::on_tree_button(GdkEventButton* event)
     if (it && (*it)[col_tree_kind_] == 2) {
       chan_menu_path_ = path;
       chan_menu_.popup(event->button, event->time);
+      return true;
+    }
+    if (it && (*it)[col_tree_kind_] == 3) {
+      query_menu_path_ = path;
+      query_menu_.popup(event->button, event->time);
       return true;
     }
     return false;
@@ -1191,7 +1388,13 @@ bool MainWindow::on_nick_leave(GdkEventCrossing* event)
 
 bool MainWindow::on_nick_button(GdkEventButton* event)
 {
-  if (!event || event->button != 1 || event->type != GDK_BUTTON_PRESS)
+  if (!event)
+    return false;
+  const bool single = event->type == GDK_BUTTON_PRESS;
+  const bool dbl = event->type == GDK_2BUTTON_PRESS;
+  if (!single && !dbl)
+    return false;
+  if (event->button != 1 && event->button != 3)
     return false;
   Gtk::TreeModel::Path path;
   Gtk::TreeViewColumn* col = nullptr;
@@ -1199,6 +1402,21 @@ bool MainWindow::on_nick_button(GdkEventButton* event)
   nick_view_.convert_widget_to_bin_window_coords(static_cast<int>(event->x),
                                                  static_cast<int>(event->y), bx, by);
   if (!nick_view_.get_path_at_pos(bx, by, path, col, cx, cy) || path.size() == 0)
+    return false;
+  if (dbl && event->button == 1) {
+    auto it = nick_store_->get_iter(path);
+    if (it && session_ && registered_)
+      show_query(strip_nick_prefix((*it)[col_nick_]));
+    return true;
+  }
+  if (single && event->button == 3) {
+    nick_menu_path_ = path;
+    nick_current_path_ = path;
+    nick_view_.queue_draw();
+    nick_menu_.popup(event->button, event->time);
+    return true;
+  }
+  if (!single || event->button != 1)
     return false;
   nick_current_path_ = path;
   nick_view_.queue_draw();
@@ -1220,6 +1438,14 @@ void MainWindow::apply_tree_path(const Gtk::TreeModel::Path& path)
     if (find_chan(name)) {
       current_channel_ = find_chan(name)->name;
       show_pane(Pane::Channel);
+      return;
+    }
+  }
+  if (kind == 3) {
+    const Glib::ustring name = (*it)[col_tree_name_];
+    if (find_query(name)) {
+      current_query_ = find_query(name)->nick;
+      show_pane(Pane::Query);
       return;
     }
   }
@@ -1265,11 +1491,36 @@ void MainWindow::on_session_nick(const Glib::ustring& old_nick, const Glib::ustr
       append_channel(ch.name, "* " + old_nick + " is now known as " + new_nick);
     }
   }
+  bool renamed_query = false;
+  if (!me) {
+    for (auto& q : queries_) {
+      if (!nick_eq(q.nick, old_nick))
+        continue;
+      const Glib::ustring from = q.nick;
+      q.nick = new_nick;
+      const Glib::ustring line = "* " + from + " is now known as " + new_nick;
+      q.buf->insert(q.buf->end(), ensure_utf8(line) + "\n");
+      chat_log_.write_query(new_nick.raw(), line.raw());
+      if (nick_eq(current_query_, from))
+        current_query_ = new_nick;
+      renamed_query = true;
+    }
+  }
   if (me) {
     connected_nick_ = new_nick;
     settings_.remember_nick(connected_server_id_.raw(), new_nick.raw());
     settings_.save();
     append_status("* You are now known as " + new_nick);
+  }
+  if (renamed_query) {
+    fill_tree_connected();
+    if (pane_ == Pane::Query && find_query(current_query_)) {
+      select_tree(3, connected_server_id_, current_query_);
+      show_pane(Pane::Query);
+    } else if (pane_ == Pane::Channel && find_chan(current_channel_))
+      select_tree(2, connected_server_id_, current_channel_);
+    else
+      select_tree(1, connected_server_id_);
   }
   refresh_nicks();
   refresh_status_bar();
@@ -1335,9 +1586,21 @@ bool MainWindow::on_lag_tick()
 
 void MainWindow::complete_nick()
 {
-  Chan* ch = find_chan(current_channel_);
-  if (!ch || pane_ != Pane::Channel)
+  std::vector<Glib::ustring> cores;
+  if (pane_ == Pane::Channel) {
+    Chan* ch = find_chan(current_channel_);
+    if (!ch)
+      return;
+    for (const auto& n : ch->nicks)
+      cores.push_back(strip_nick_prefix(n));
+  } else if (pane_ == Pane::Query) {
+    QueryBuf* q = find_query(current_query_);
+    if (!q)
+      return;
+    cores.push_back(q->nick);
+  } else {
     return;
+  }
   const Glib::ustring text = input_.get_text();
   if (tab_index_ < 0) {
     Glib::ustring::size_type i = text.size();
@@ -1349,8 +1612,7 @@ void MainWindow::complete_nick()
     tab_matches_.clear();
     if (tab_prefix_.empty())
       return;
-    for (const auto& n : ch->nicks) {
-      const Glib::ustring core = strip_nick_prefix(n);
+    for (const auto& core : cores) {
       if (g_ascii_strncasecmp(core.c_str(), tab_prefix_.c_str(),
                               static_cast<int>(tab_prefix_.size())) == 0)
         tab_matches_.push_back(core);

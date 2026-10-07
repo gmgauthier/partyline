@@ -20,7 +20,7 @@ class MainWindow : public Gtk::Window {
   ~MainWindow() override;
 
  private:
-  enum class Pane { Status, Channel };
+  enum class Pane { Status, Channel, Query };
 
   void load_css();
   void build_menu();
@@ -35,6 +35,10 @@ class MainWindow : public Gtk::Window {
   void refresh_status_bar();
   void append_status(const Glib::ustring& text);
   void append_channel(const Glib::ustring& channel, const Glib::ustring& text);
+  void append_query(const Glib::ustring& nick, const Glib::ustring& text);
+  void ensure_query(const Glib::ustring& nick);
+  void show_query(const Glib::ustring& nick);
+  void close_query(const Glib::ustring& nick);
   void show_pane(Pane pane);
   void show_not_yet(const Glib::ustring& feature);
   void set_connected_ui(bool on);
@@ -94,6 +98,8 @@ class MainWindow : public Gtk::Window {
   bool on_tree_leave(GdkEventCrossing* event);
   bool on_tree_button(GdkEventButton* event);
   void on_tree_leave_channel();
+  void on_tree_close_query();
+  void on_nick_query();
   void on_inner_allocate(Gtk::Allocation& alloc);
   int nick_pane_width();
   void apply_tree_path(const Gtk::TreeModel::Path& path);
@@ -138,7 +144,11 @@ class MainWindow : public Gtk::Window {
   Gtk::ScrolledWindow nick_scroll_;
   Gtk::TreeView nick_view_;
   Gtk::Menu chan_menu_;
+  Gtk::Menu query_menu_;
+  Gtk::Menu nick_menu_;
   Gtk::TreeModel::Path chan_menu_path_;
+  Gtk::TreeModel::Path query_menu_path_;
+  Gtk::TreeModel::Path nick_menu_path_;
   Gtk::Statusbar status_;
   guint status_ctx_ = 0;
 
@@ -159,9 +169,16 @@ class MainWindow : public Gtk::Window {
     Glib::RefPtr<Gtk::TextBuffer> buf;
     std::vector<Glib::ustring> nicks;
   };
+  struct QueryBuf {
+    Glib::ustring nick;
+    Glib::RefPtr<Gtk::TextBuffer> buf;
+  };
   std::vector<Chan> channels_;
+  std::vector<QueryBuf> queries_;
   Chan* find_chan(const Glib::ustring& name);
   const Chan* find_chan(const Glib::ustring& name) const;
+  QueryBuf* find_query(const Glib::ustring& nick);
+  const QueryBuf* find_query(const Glib::ustring& nick) const;
 
   Settings settings_;
   ChatLog chat_log_;
@@ -171,6 +188,7 @@ class MainWindow : public Gtk::Window {
   Glib::ustring connected_nick_;
   Glib::ustring connected_server_id_;
   Glib::ustring current_channel_;
+  Glib::ustring current_query_;
   bool registered_ = false;
   bool suppress_tree_ = false;
   std::vector<Glib::ustring> history_;
