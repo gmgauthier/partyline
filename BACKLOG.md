@@ -1,18 +1,17 @@
 # Partyline backlog
 
-Current release: **v0.2.14**. Last updated: 2026-10-06.
+Current release: **v0.2.14**. Last updated: 2026-10-07.
 
 mIRC 5.x / 6. Binary `partyline`. Suite catalog: `lcos-projects/PRODUCT-BACKLOG.md`. Design: `lcos-projects/IRC.md`. Plan: [DEVELOPMENT.md](DEVELOPMENT.md). How to land work: [DEVELOPMENT.md](DEVELOPMENT.md#process) — `feature/` / `fix/` branches, PRs to `master`, lint gate, semver on shipped PRs.
 
-v1 dumps private messages on the Status buffer. Live with that before opening a new milestone.
+A private message opens a query buffer for that nick and selects it. `/query nick` opens one. `/msg nick text` sends without opening one; an already open query still keeps the line.
 
 ## High Priority
 
-Nothing queued as a next slice. After v1 has been lived with, the first real hole is **query windows** (PRIVMSG to a nick currently lands on Status). Until then, parked work stays under Low Priority.
+Nothing queued.
 
 ## Low Priority
 
-- Query windows
 - Auto-join (checkbox, default off — not a reconnect storm)
 - SASL (parked unless the TLS wrap makes it cheap)
 - Highlight

@@ -91,10 +91,20 @@ void ChatLog::write_query(const std::string& nick, const std::string& line)
 
 std::vector<std::string> ChatLog::tail_channel(const std::string& channel, int max_lines) const
 {
+  return tail_leaf(log_leaf(channel, true) + ".txt", max_lines);
+}
+
+std::vector<std::string> ChatLog::tail_query(const std::string& nick, int max_lines) const
+{
+  return tail_leaf(log_leaf(nick, false) + ".txt", max_lines);
+}
+
+std::vector<std::string> ChatLog::tail_leaf(const std::string& leaf, int max_lines) const
+{
   std::vector<std::string> out;
   if (host_key_.empty() || max_lines <= 0)
     return out;
-  const std::string path = file_path(log_leaf(channel, true) + ".txt");
+  const std::string path = file_path(leaf);
   FILE* fp = std::fopen(path.c_str(), "rb");
   if (!fp)
     return out;
